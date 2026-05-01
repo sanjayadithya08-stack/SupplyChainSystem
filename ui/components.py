@@ -234,14 +234,14 @@ def render_llm_summary(plan: dict):
     else:
         st.caption(f"⚙️ Rule Engine active. Add `GEMINI_API_KEY` to `.env` to enable AI summaries.")
 
-def render_action_checklist(actions: list, title: str):
+def render_action_checklist(actions: list, title: str, uid: str = ""):
     if not actions:
         st.markdown(f"<p style='color:{THEME['muted']};font-size:0.88rem;'>No actions for this phase.</p>", unsafe_allow_html=True)
         return
     for i, act in enumerate(actions):
-        st.checkbox(act, key=f"chk_{title}_{i}_{act[:20]}")
+        st.checkbox(act, key=f"chk_{uid}_{title}_{i}_{act[:20]}")
 
-def render_prevention_plan(plan: dict):
+def render_prevention_plan(plan: dict, uid: str = ""):
     try:
         priority = plan.get("priority", "P3")
         cost = plan.get("estimated_cost_impact", "Unknown")
@@ -261,9 +261,9 @@ def render_prevention_plan(plan: dict):
         render_llm_summary(plan)
 
         t1, t2, t3 = st.tabs(["⚡ Immediate (1h)", "⏱️ Short-term (24h)", "📅 Long-term (1w)"])
-        with t1: render_action_checklist(plan.get("immediate_actions", []), "imm")
-        with t2: render_action_checklist(plan.get("short_term_actions", []), "st")
-        with t3: render_action_checklist(plan.get("long_term_actions", []), "lt")
+        with t1: render_action_checklist(plan.get("immediate_actions", []), "imm", uid)
+        with t2: render_action_checklist(plan.get("short_term_actions", []), "st", uid)
+        with t3: render_action_checklist(plan.get("long_term_actions", []), "lt", uid)
 
         inv = plan.get("inventory_recommendations", [])
         if inv:

@@ -178,6 +178,8 @@ async def get_shipment_threats():
     except Exception as e:
         return {"error": str(e)}
 
+# Trigger reload
+
 @app.get("/news")
 async def get_live_news(region: str = Query("global")):
     try:
@@ -242,16 +244,25 @@ async def monitor_stats():
 @app.get("/monitor/health", response_model=HealthResponse)
 async def monitor_health():
     try:
+        import psutil
         uptime = time.time() - START_TIME
         artefacts_status = {
             "model.pkl": os.path.exists(Config.MODEL_PATH),
             "pipeline.pkl": os.path.exists(Config.PIPELINE_PATH),
             "dataset.csv": os.path.exists(Config.DATASET_PATH)
         }
+        
+        sys_metrics = {
+            "cpu_percent": psutil.cpu_percent(interval=0.1),
+            "memory_percent": psutil.virtual_memory().percent,
+            "disk_percent": psutil.disk_usage('/').percent
+        }
+        
         status = "healthy" if PIPELINE is not None else "degraded"
         return HealthResponse(
             status=status, model_loaded=PIPELINE is not None,
-            uptime_seconds=round(uptime, 2), artefacts=artefacts_status
+            uptime_seconds=round(uptime, 2), artefacts=artefacts_status,
+            system_metrics=sys_metrics
         )
     except Exception as e:
         return HealthResponse(status="error", model_loaded=False, uptime_seconds=0.0, artefacts={})

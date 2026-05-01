@@ -32,12 +32,13 @@ def get_all_shipments() -> list[Shipment]:
                 value_usd=r.value_usd, units=r.units
             ) for r in rows]
     except Exception as e:
-        print(f"[ShipmentService] DB unavailable: {e}")
-        return []
+        return [{"error": f"DB Error: {str(e)}"}]
 
 def get_enriched_shipments() -> list[dict]:
     """Returns shipments joined with supplier and route info."""
     shipments = get_all_shipments()
+    if shipments and isinstance(shipments[0], dict) and "error" in shipments[0]:
+        return shipments
     suppliers = {s.id: s for s in get_all_suppliers()}
     routes = {r.id: r for r in get_all_routes()}
     

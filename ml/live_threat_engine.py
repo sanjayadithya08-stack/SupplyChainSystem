@@ -39,11 +39,11 @@ def _extract_threats():
     # Geo
     geo = fetch_geo_events()
     for g in geo:
-        if g["severity"] in ["HIGH", "CRITICAL"]:
+        if g.severity in ["HIGH", "CRITICAL"]:
             # naive region mapping
             threats.append({
-                "source": "Geopolitical", "region": "global", "type": g["event_type"],
-                "desc": g["description"], "severity": g["severity"]
+                "source": "Geopolitical", "region": "global", "type": g.event_type,
+                "desc": g.description, "severity": g.severity
             })
             
     return threats
@@ -98,6 +98,7 @@ def analyze_live_shipments():
         
         # Generate prevention plan if risk is elevated
         plan = None
+        alert_sent = False
         if prediction["label"] in ["HIGH", "CRITICAL"]:
             from ml.prevention_engine import generate_prevention_plan
             plan = generate_prevention_plan({
@@ -107,11 +108,21 @@ def analyze_live_shipments():
                 "estimated_duration_days": event_payload["delay_days"]
             })
             
+            # AUTOMATICALLY UPDATE RECEIVER AND SENDER
+            from services.alert_service import send_prevention_plan
+            recipients = [
+                f"{shp['supplier_id']}@supplier.example.com",
+                f"{shp['receiver_id']}@company.example.com"
+            ]
+            plan["target_shipment"] = shp["id"] # Add context for the email
+            alert_sent = send_prevention_plan(plan, recipients)
+            
         results.append({
             "shipment": shp,
             "threats": matched_threats,
             "prediction": prediction,
-            "plan": plan
+            "plan": plan,
+            "alert_sent": alert_sent
         })
         
     return results

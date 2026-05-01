@@ -74,8 +74,8 @@ if not health:
     st.error("⚠️ API unreachable. Cannot fetch live shipment data.")
 
 # ── Tabs ───────────────────────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📦 Live Shipments", "📡 Threat Radar", "🗺️ Network Map", "📈 Analytics", "📊 System Monitor"
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "📦 Live Shipments", "📡 Threat Radar", "🗺️ Network Map", "📈 Analytics", "📊 System Monitor", "📰 Live Intelligence"
 ])
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -86,10 +86,10 @@ with tab1:
     
     shipments = api_get("/shipments/live") or []
     
-    if shipments:
+    if shipments and isinstance(shipments, list) and "error" not in shipments[0]:
         k1, k2, k3, k4 = st.columns(4)
-        active = [s for s in shipments if s["status"] != "Delivered"]
-        val_transit = sum(s["value_usd"] for s in active)
+        active = [s for s in shipments if s.get("status", "") != "Delivered"]
+        val_transit = sum(s.get("value_usd", 0) for s in active)
         delays = sum(1 for s in active if s["status"] == "Delayed")
         
         with k1: stat_card("Active Shipments", str(len(active)), "📦", THEME["cyan"])
@@ -151,7 +151,9 @@ with tab2:
                             
                     with c2:
                         if plan:
-                            render_prevention_plan(plan)
+                            if item.get("alert_sent"):
+                                st.markdown(f"<div style='background:{THEME['green']}22;color:{THEME['green']};padding:8px 12px;border-radius:6px;font-size:0.85rem;font-weight:600;margin-bottom:12px;border:1px solid {THEME['green']}44;'>✅ Automated Mitigations Sent to {shp['supplier_id']} (Sender) and {shp['receiver_id']} (Receiver)</div>", unsafe_allow_html=True)
+                            render_prevention_plan(plan, uid=shp["id"])
                         else:
                             st.info("No prevention plan required. Risk is low.")
 
@@ -279,10 +281,25 @@ with tab5:
         status = health.get("status", "unknown")
         uptime_m = round(health.get("uptime_seconds", 0) / 60, 1)
         arts = health.get("artefacts", {})
+        sys = health.get("system_metrics", {})
+        
         with h1: stat_card("API Status", status.upper(), "🟢" if status == "healthy" else "🔴", THEME["green"] if status == "healthy" else THEME["red"])
         with h2: stat_card("Uptime", f"{uptime_m}m", "⏱️", THEME["cyan"])
         with h3: stat_card("Model", "Loaded" if health.get("model_loaded") else "Missing", "🤖", THEME["green"] if health.get("model_loaded") else THEME["red"])
         with h4: stat_card("Artefacts", f"{sum(arts.values())}/{len(arts)}", "📦", THEME["purple"])
+        
+        if sys:
+            st.markdown(f"<div style='color:{THEME['muted']};font-size:0.8rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;'>Server Resources</div>", unsafe_allow_html=True)
+            s1, s2, s3 = st.columns(3)
+            with s1:
+                cpu = sys.get('cpu_percent', 0)
+                st.progress(cpu / 100, text=f"💻 CPU Load: {cpu}%")
+            with s2:
+                mem = sys.get('memory_percent', 0)
+                st.progress(mem / 100, text=f"🧠 Memory: {mem}%")
+            with s3:
+                disk = sys.get('disk_percent', 0)
+                st.progress(disk / 100, text=f"💾 Disk: {disk}%")
     
     st.markdown(f"<div style='color:{THEME['cyan']};font-weight:700;font-size:0.82rem;text-transform:uppercase;letter-spacing:0.08em;margin:16px 0 10px;'>Recent Alerts & Broadcast</div>", unsafe_allow_html=True)
     al1, al2 = st.columns([2, 1], gap="large")
@@ -308,3 +325,55 @@ with tab5:
         slack_status = "Slack [ON]" if Config.SLACK_WEBHOOK_URL and "hooks" in Config.SLACK_WEBHOOK_URL else "Slack [OFF]"
         email_status = "Email [ON]" if Config.SMTP_USER else "Email [OFF]"
         st.caption(f"Channels active: {slack_status} | {email_status} | Log [ON]")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 6 — Live Intelligence
+# ══════════════════════════════════════════════════════════════════════════════
+with tab6:
+    section_header("Live Global Intelligence", "Real-time news monitoring for possible disruptions")
+    
+    col_news_refresh, _ = st.columns([1, 5])
+    if col_news_refresh.button("🔄 Fetch Latest News", use_container_width=True):
+        st.rerun()
+        
+    with st.spinner("Fetching global news..."):
+        news = api_get("/news") or []
+        
+    if not news:
+        st.info("No news fetched or API unreachable.")
+    else:
+        st.markdown("<div style='display:flex;flex-direction:column;gap:16px;'>", unsafe_allow_html=True)
+        for n in news:
+            sev = n.get('severity_hint', 'LOW')
+            color = get_risk_color_local(sev)
+            url = n.get('url', '#')
+            target = "target='_blank'" if url != '#' and url != '' else ""
+            
+            # Format published_at
+            try:
+                dt = pd.to_datetime(n.get('published_at', ''))
+                date_str = dt.strftime("%b %d, %Y - %H:%M")
+            except:
+                date_str = n.get('published_at', '')
+            
+            st.markdown(f"""
+                <div style="background:{THEME['card']};border-left:4px solid {color};
+                            border-radius:8px;padding:16px;width:100%;box-shadow:0 2px 5px rgba(0,0,0,0.2);">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+                        <div style="font-weight:700;font-size:1.1rem;color:{THEME['text']};max-width:80%;">{n.get('headline')}</div>
+                        <div style="background:{color}22;color:{color};padding:4px 10px;border-radius:12px;font-size:0.7rem;font-weight:800;letter-spacing:0.05em;">{sev}</div>
+                    </div>
+                    <div style="color:{THEME['muted']};font-size:0.8rem;margin-bottom:12px;display:flex;gap:12px;">
+                        <span>🏢 {n.get('source')}</span>
+                        <span>🏷️ {n.get('category', '').title()}</span>
+                        <span>🌍 {n.get('region', '').title()}</span>
+                        <span>📅 {date_str}</span>
+                    </div>
+                    <a href="{url}" {target} style="display:inline-block;background:{THEME['cyan']}15;color:{THEME['cyan']};
+                                          padding:6px 14px;border-radius:6px;font-size:0.85rem;font-weight:600;
+                                          text-decoration:none;border:1px solid {THEME['cyan']}44;transition:all 0.2s;">
+                        Read Article 🔗
+                    </a>
+                </div>
+            """, unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)

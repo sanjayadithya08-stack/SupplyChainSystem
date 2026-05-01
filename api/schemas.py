@@ -41,4 +41,5 @@ class HealthResponse(BaseModel):
     model_loaded: bool
     uptime_seconds: float
     artefacts: Dict[str, bool]
+    system_metrics: Dict[str, Any] = Field(default_factory=dict)
     version: str = "2.0.0"

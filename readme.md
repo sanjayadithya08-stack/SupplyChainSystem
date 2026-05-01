@@ -1,27 +1,30 @@
 <div align="center">
-  <h1>🚢 AI-Powered Supply Chain Disruption Predictor & Preventer</h1>
-  <p><i>A fault-tolerant, production-ready system utilizing the <b>Antigravity Architecture</b> to predict and actively prevent global supply chain disruptions.</i></p>
+  <h1>🚢 TechCore: Enterprise Supply Chain Intelligence</h1>
+  <p><i>A production-grade, autonomous platform for tracking active shipments, predicting disruptions, and executing automated mitigation plans.</i></p>
   
   ![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)
   ![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green.svg)
   ![Streamlit](https://img.shields.io/badge/Streamlit-1.28+-red.svg)
   ![Scikit-Learn](https://img.shields.io/badge/scikit--learn-1.3+-orange.svg)
+  ![SQLite](https://img.shields.io/badge/SQLite-3.0+-blue.svg)
 </div>
 
 ---
 
 ## 🌟 Overview
 
-Supply chains are vulnerable to countless unpredictable events—from port strikes and extreme weather to cyberattacks and geopolitical conflicts. 
+**TechCore SupplyChain AI** is a shipment-centric intelligence platform designed to move logistics from reactive to proactive. Unlike generic news trackers, this system centers strictly on your company's operational data—tracking every active shipment, correlating global events (weather, strikes, geopolitical) to specific transit routes, and autonomously notifying stakeholders when revenue is at risk.
 
-This project is a **Predictive & Preventive AI System**. It doesn't just warn you about a problem; it generates an immediate action plan. Powered by a Random Forest NLP model, it reads unstructured live intelligence (News, Weather, Geo-events), predicts the compounding risk, and triggers automated action plans to reroute logistics and switch suppliers before the disruption hits.
+---
 
-### Core Features
-- **🤖 Intelligence Engine**: Parses unstructured text to predict *Risk Level* and *Disruption Type*.
-- **🛡️ Prevention Engine**: Dynamically generates Immediate, Short-term, and Long-term mitigation checklists.
-- **🗺️ Interactive Map**: Real-time supplier tier tracking and shipping route delay estimations.
-- **⚡ Antigravity Architecture**: Designed with strict fault tolerance. If an external API or model fails, the system automatically degrades gracefully instead of crashing.
-- **📊 6-Tab Command Center**: A premium Streamlit dashboard for manual analysis, batch processing, and live global radar monitoring.
+## 🚀 Key Features
+
+- **📦 Live Shipment Ledger**: Real-time tracking of active cargo, SKU-level value in transit, and dynamic ETA monitoring.
+- **📡 AI Threat Radar**: An automated engine that cross-references live news, weather, and geo-signals against active shipment routes to predict disruptions using a Gradient Boosting ML model.
+- **📧 Autonomous Mitigation**: Automatically dispatches prevention plans and risk alerts to the **Sender (Supplier)** and **Receiver** via Email/Slack when critical threats are detected.
+- **📰 Live Intelligence Feed**: A curated, real-time disruption feed with direct links to original sources and AI-assigned severity levels.
+- **🩺 System Monitor**: Real-time health dashboard tracking API status, model load state, and server resource utilization (CPU, RAM, Disk).
+- **📈 Company Analytics**: Historical analysis of supplier reliability, revenue-at-risk trends, and disruption frequency.
 
 ---
 
@@ -30,79 +33,60 @@ This project is a **Predictive & Preventive AI System**. It doesn't just warn yo
 ```text
 C:\SupplyChain\
 ├── api/
-│   ├── main.py                   <- FastAPI Endpoints
-│   ├── middleware.py             <- Fault-tolerance tracking
-│   └── schemas.py                <- Pydantic Models
+│   ├── main.py                   <- FastAPI Endpoints (Shipments, Threats, News)
+│   ├── schemas.py                <- Pydantic Models for system communication
+├── db/
+│   ├── models.py                 <- SQLAlchemy Models (Shipments, Suppliers, Routes)
 ├── data/
-│   ├── dataset.csv               <- Training data (60+ Scenarios)
-│   └── augment_data.py           <- Automated data multiplier
+│   └── supplychain.db            <- SQLite Production Database
 ├── ml/
-│   ├── prevention_engine.py      <- Brain that maps risk to actions
-│   ├── train_model.py            <- TF-IDF & Random Forest pipeline
-│   └── predict.py                <- Inference logic
+│   ├── live_threat_engine.py     <- Core Correlation Engine (Threats + Shipments)
+│   ├── company_predict.py        <- ML Inference (Gradient Boosting)
+│   ├── prevention_engine.py      <- Action plan generator
+│   └── train_model.py            <- Training pipeline for TechCore data
 ├── services/
-│   ├── alert_service.py          <- Automated email/log alerts
-│   ├── supplier_service.py       <- Supplier tiers & risk scoring
-│   ├── route_service.py          <- Transit routes & delay tracking
-│   ├── news_service.py           <- Live Global Headlines API Stub
-│   ├── weather_service.py        <- Weather API Stub
-│   └── geo_service.py            <- Geopolitical API Stub
+│   ├── shipment_service.py       <- Active shipment management
+│   ├── alert_service.py          <- Automated dispatch (Email/Slack/Log)
+│   ├── news_service.py           <- Live Global Intelligence API
+│   ├── weather_service.py        <- Real-time Weather monitoring
+│   └── geo_service.py            <- Geopolitical event tracking
 ├── ui/
-│   ├── app.py                    <- Streamlit 6-Tab Interface
-│   └── components.py             <- Premium CSS and rendering functions
+│   ├── app.py                    <- Premium 6-Tab Command Center
+│   └── components.py             <- Modern CSS & UI Component Library
 ├── utils/
-│   ├── config.py                 <- Master Configuration
-│   └── text_preprocessing.py     <- NLP cleaning
-├── logs/                         <- Alert & Prediction audit trails
-└── run.py                        <- Master Application Launcher
+│   └── config.py                 <- Master Configuration & Environment
+└── logs/                         <- Automated Alert & Audit Trails
 ```
 
 ---
 
-## 🚀 Quick Start Guide
+## 🛠️ Setup & Execution
 
-### 1. Setup Environment
+### 1. Installation
 ```bash
-# Create and activate virtual environment
-python -m venv venv
-# On Windows:
-.\venv\Scripts\Activate.ps1
-# On Mac/Linux:
-source venv/bin/activate
-
-# Install dependencies
+# Activate your environment and install dependencies
 pip install -r requirements.txt
 ```
 
 ### 2. Configuration
-Copy the example environment file:
-```bash
-# On Windows:
-Copy-Item .env.example -Destination .env
-# On Mac/Linux:
-cp .env.example .env
-```
+Ensure your `.env` file contains the necessary keys for full functionality:
+- `NEWS_API_KEY`: For live intelligence feed.
+- `GEMINI_API_KEY`: For AI-generated executive summaries.
+- `SLACK_WEBHOOK_URL`: For automated team notifications.
 
-### 3. Train the AI Model
-Initialize the dataset and train the Random Forest classifier:
-```bash
-python run.py train
-```
-*Note: This will auto-generate the TF-IDF vectorizer and model pipeline into `ml/artefacts/`.*
-
-### 4. Launch the System
-Start the FastAPI backend and Streamlit dashboard simultaneously:
+### 3. Launching the Platform
+Start both the backend intelligence engine and the frontend command center:
 ```bash
 python run.py all
 ```
-The **Command Center Dashboard** will automatically open in your browser at `http://localhost:8501`.
+Access the dashboard at `http://localhost:8501`.
 
 ---
 
-## 🏗️ The Antigravity Architecture
+## 🧠 Intelligence Workflow
 
-This application was strictly designed around the **Antigravity Principle**: *No single point of failure should collapse the system.*
-
-1. **Graceful Degradation:** If the ML model file is accidentally deleted, the system stays online and returns `UNKNOWN` risk rather than throwing a 500 server error.
-2. **Resilient UI:** If the backend API goes offline, the Streamlit dashboard detects the outage, displays a warning banner, and keeps the UI active.
-3. **In-Memory Caching:** External API calls (like fetching live news or weather) are protected by caching services to prevent rate-limiting and guarantee rapid dashboard reloads.
+1. **Ingest**: The system monitors the internal SQLite database for all shipments marked "In Transit".
+2. **Scan**: It polls live global APIs for news, weather, and geopolitical events.
+3. **Correlate**: The **Live Threat Engine** identifies overlaps between external events and active shipment regions/routes.
+4. **Predict**: The Gradient Boosting model calculates the probability of delay and total revenue at risk.
+5. **Mitigate**: If risk is HIGH/CRITICAL, the system autonomously emails the specific Supplier and Receiver with an immediate action plan.
