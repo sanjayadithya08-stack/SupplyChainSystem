@@ -108,6 +108,57 @@ async def analyze_batch(payload: BatchInput):
     except Exception as e:
         return {"error": str(e), "results": []}
 
+# ── Company-Specific Endpoints ─────────────────────────────────────────────────
+@app.post("/company/predict")
+async def company_predict_event(event: dict):
+    """Predict disruption for a structured company supply chain event."""
+    try:
+        from ml.company_predict import predict_event
+        return predict_event(event)
+    except Exception as e:
+        return {"label": "UNKNOWN", "error": str(e)}
+
+@app.get("/company/history")
+async def company_history():
+    """Return all historical events with model predictions."""
+    try:
+        from ml.company_predict import predict_all_historical
+        return predict_all_historical()
+    except Exception as e:
+        return []
+
+@app.get("/company/dataset")
+async def company_dataset():
+    """Return raw company dataset as JSON."""
+    try:
+        import pandas as pd
+        from utils.config import Config
+        df = pd.read_csv(Config.DATA_DIR + "/company_dataset.csv")
+        return df.to_dict(orient="records")
+    except Exception as e:
+        return []
+
+@app.get("/company/stats")
+async def company_stats():
+    """Return aggregated stats from company dataset."""
+    try:
+        import pandas as pd
+        from utils.config import Config
+        df = pd.read_csv(Config.DATA_DIR + "/company_dataset.csv")
+        return {
+            "total_events": int(len(df)),
+            "total_revenue_at_risk": int(df["revenue_at_risk_usd"].sum()),
+            "total_units_affected": int(df["affected_units"].sum()),
+            "avg_delay_days": round(float(df[df["delay_days"] > 0]["delay_days"].mean()), 1),
+            "by_label": df["label"].value_counts().to_dict(),
+            "by_disruption_type": df["disruption_type"].value_counts().to_dict(),
+            "by_supplier": df.groupby("supplier_name")["revenue_at_risk_usd"].sum().sort_values(ascending=False).head(5).to_dict(),
+            "by_region": df.groupby("region")["revenue_at_risk_usd"].sum().sort_values(ascending=False).to_dict(),
+            "worst_events": df.nlargest(5, "revenue_at_risk_usd")[["event_id","date","supplier_name","disruption_type","revenue_at_risk_usd","label"]].to_dict(orient="records"),
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
 @app.get("/news")
 async def get_live_news(region: str = Query("global")):
     try:

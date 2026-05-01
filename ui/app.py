@@ -72,9 +72,9 @@ if not health:
     st.error("⚠️ API unreachable. Antigravity mode — UI stays active.")
 
 # ── Tabs ───────────────────────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📝 Analyze", "🧩 Multi-Signal", "📡 Live Radar",
-    "📚 Batch", "🗺️ Network Map", "📊 Monitor"
+    "📚 Batch", "🗺️ Network Map", "📊 Monitor", "🏭 Company Intel"
 ])
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -316,7 +316,8 @@ with tab6:
         with h3: stat_card("Model", "Loaded" if health.get("model_loaded") else "Missing", "🤖", THEME["green"] if health.get("model_loaded") else THEME["red"])
         with h4: stat_card("Artefacts", f"{sum(arts.values())}/{len(arts)}", "📦", THEME["purple"])
 
-        st.markdown(f"<div style='color:{THEME['muted']};font-size:0.78rem;margin-bottom:16px;'>Version: {health.get('version','—')} &nbsp;|&nbsp; Artefacts: {', '.join(f'{k}: {\"✅\" if v else \"❌\"}' for k,v in arts.items())}</div>", unsafe_allow_html=True)
+        arts_str = ", ".join(f"{k}: {'✅' if v else '❌'}" for k, v in arts.items())
+        st.markdown(f"<div style='color:{THEME['muted']};font-size:0.78rem;margin-bottom:16px;'>Version: {health.get('version', '—')} &nbsp;|&nbsp; Artefacts: {arts_str}</div>", unsafe_allow_html=True)
     else:
         st.error("API is OFFLINE — cannot fetch health data.")
 
@@ -374,4 +375,144 @@ with tab6:
                 else:
                     st.warning("Enter a message first.")
 
-        st.markdown(f"<div style='color:{THEME['muted']};font-size:0.75rem;margin-top:12px;'>Channels active: {'✅ Slack' if Config.SLACK_WEBHOOK_URL and 'hooks' in Config.SLACK_WEBHOOK_URL else '❌ Slack'} &nbsp; {'✅ Email' if Config.SMTP_USER else '❌ Email'} &nbsp; ✅ Log</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='color:{THEME['muted']};font-size:0.75rem;margin-top:12px;'>Channels active: {'[ON] Slack' if Config.SLACK_WEBHOOK_URL and 'hooks' in Config.SLACK_WEBHOOK_URL else '[OFF] Slack'} &nbsp; {'[ON] Email' if Config.SMTP_USER else '[OFF] Email'} &nbsp; [ON] Log</div>", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 7 — Company Intelligence
+# ══════════════════════════════════════════════════════════════════════════════
+def get_risk_color_local(risk):
+    return {"LOW": THEME["green"], "MEDIUM": THEME["amber"], "HIGH": "#ff6b35", "CRITICAL": THEME["red"]}.get(str(risk).upper(), THEME["muted"])
+
+with tab7:
+    section_header("TechCore Industries — Supply Chain Intelligence",
+                   "Historical disruption tracking · Supplier risk · Financial exposure · ML predictions")
+
+    cstats = api_get("/company/stats", timeout=6) or {}
+
+    if cstats:
+        k1, k2, k3, k4 = st.columns(4)
+        with k1: stat_card("Total Events", str(cstats.get("total_events", 0)), "📋", THEME["cyan"])
+        with k2:
+            rev = cstats.get("total_revenue_at_risk", 0)
+            stat_card("Revenue at Risk", f"${rev/1_000_000:.1f}M", "💰", THEME["red"])
+        with k3: stat_card("Avg Delay", f"{cstats.get('avg_delay_days', 0)}d", "⏱️", THEME["amber"])
+        with k4:
+            units = cstats.get("total_units_affected", 0)
+            stat_card("Units Affected", f"{units:,}", "📦", THEME["purple"])
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    ci1, ci2, ci3, ci4 = st.tabs(["📈 Overview", "🔍 Event History", "⚠️ Supplier Risk", "🧪 Predict Event"])
+
+    with ci1:
+        if cstats:
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.markdown(f"<div style='color:{THEME['cyan']};font-weight:700;font-size:0.82rem;text-transform:uppercase;margin-bottom:10px;'>By Disruption Type</div>", unsafe_allow_html=True)
+                for dtype, cnt in cstats.get("by_disruption_type", {}).items():
+                    pct = int(cnt / max(cstats.get("total_events", 1), 1) * 100)
+                    color = {"normal": THEME["green"], "port_strike": THEME["amber"], "weather": THEME["blue"],
+                             "war": THEME["red"], "cyber": THEME["purple"], "supplier": "#ff6b35",
+                             "logistics": THEME["cyan"], "customs": "#ffb020"}.get(dtype, THEME["muted"])
+                    st.markdown(f"""
+                        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                            <div style="width:110px;color:{THEME['text']};font-size:0.83rem;">{dtype.replace('_',' ').title()}</div>
+                            <div style="flex:1;background:{THEME['border']};border-radius:4px;height:10px;">
+                                <div style="background:{color};width:{pct}%;height:10px;border-radius:4px;"></div>
+                            </div>
+                            <span style="color:{THEME['muted']};font-size:0.8rem;">{cnt}</span>
+                        </div>""", unsafe_allow_html=True)
+            with col_b:
+                st.markdown(f"<div style='color:{THEME['cyan']};font-weight:700;font-size:0.82rem;text-transform:uppercase;margin-bottom:10px;'>Top 5 Worst Events by Revenue</div>", unsafe_allow_html=True)
+                for e in cstats.get("worst_events", []):
+                    c = get_risk_color_local(e.get("label", "LOW"))
+                    st.markdown(f"""
+                        <div style="background:{THEME['card']};border-left:4px solid {c};border:1px solid {c}44;
+                                    border-radius:8px;padding:10px 14px;margin-bottom:8px;">
+                            <div style="display:flex;justify-content:space-between;">
+                                <span style="color:{THEME['text']};font-weight:600;font-size:0.85rem;">{e['supplier_name']}</span>
+                                <span style="color:{c};font-weight:700;">${e['revenue_at_risk_usd']:,}</span>
+                            </div>
+                            <div style="color:{THEME['muted']};font-size:0.75rem;margin-top:3px;">{e['date']} · {e['disruption_type']} · {e['label']}</div>
+                        </div>""", unsafe_allow_html=True)
+        else:
+            st.warning("No company stats. Check API is running.")
+
+    with ci2:
+        history = api_get("/company/history", timeout=10) or []
+        if history:
+            df_h = pd.DataFrame(history)
+            acc = round(sum(1 for r in history if r.get("correct")) / len(history) * 100, 1)
+            ha1, ha2, ha3 = st.columns(3)
+            ha1.metric("Total Events", len(history))
+            ha2.metric("Model Accuracy", f"{acc}%")
+            ha3.metric("Mismatches", sum(1 for r in history if not r.get("correct")))
+            filter_l = st.selectbox("Filter by Risk", ["All", "CRITICAL", "HIGH", "MEDIUM", "LOW"])
+            if filter_l != "All": df_h = df_h[df_h["actual"] == filter_l]
+            def sr(val): c = get_risk_color_local(val); return f"background:{c}25;color:{c};font-weight:700;"
+            def sc(val): return f"color:{THEME['green']};" if val else f"color:{THEME['red']};"
+            cols = ["event_id","date","supplier_name","disruption_type","affected_units","delay_days","revenue_at_risk_usd","actual","label","confidence","correct"]
+            avail = [c for c in cols if c in df_h.columns]
+            st.dataframe(df_h[avail].style.map(sr, subset=[c for c in ["actual","label"] if c in avail]).map(sc, subset=["correct"] if "correct" in avail else []), use_container_width=True, height=400)
+        else:
+            st.info("No history yet.")
+
+    with ci3:
+        raw = api_get("/company/dataset", timeout=6) or []
+        if raw:
+            df_r = pd.DataFrame(raw)
+            df_s = df_r.groupby("supplier_name").agg(
+                total_events=("event_id","count"),
+                critical=("label", lambda x: (x=="CRITICAL").sum()),
+                high=("label", lambda x: (x=="HIGH").sum()),
+                revenue_at_risk=("revenue_at_risk_usd","sum"),
+                avg_delay=("delay_days","mean"),
+                reliability=("supplier_reliability_score","mean"),
+                country=("supplier_country","first"),
+            ).reset_index().round(2).sort_values("revenue_at_risk", ascending=False)
+            def srv(v): return f"color:{THEME['red']};font-weight:700;" if v > 2_000_000 else (f"color:{THEME['amber']};" if v > 500_000 else "")
+            def scc(v): return f"color:{THEME['red']};font-weight:700;" if v > 2 else ""
+            st.dataframe(df_s.style.map(srv, subset=["revenue_at_risk"]).map(scc, subset=["critical"]), use_container_width=True, height=400)
+        else:
+            st.warning("No data available.")
+
+    with ci4:
+        section_header("Predict a New Supply Chain Event", "Use the company-trained model")
+        p1, p2, p3 = st.columns(3)
+        with p1:
+            sc_ = st.selectbox("Supplier Country", ["Taiwan","China","South Korea","Germany","Vietnam","USA","Canada","Mexico","India","Indonesia","Thailand","Peru","Czech Republic"])
+            pl_ = st.selectbox("Product Line", ["Semiconductors","Consumer Tech","Auto Parts","Fabrics","Raw Materials","Chemicals","Pharmaceuticals","Plastics"])
+            dt_ = st.selectbox("Disruption Type", ["port_strike","weather","war","cyber","logistics","supplier","customs","normal"])
+        with p2:
+            rg_ = st.selectbox("Region", Config.REGIONS)
+            rt_ = st.selectbox("Route", ["R1","R2","R3","R4","R5","R6","R7","R8","R9","R10","R11","R12"])
+            rel_= st.slider("Supplier Reliability", 0.0, 1.0, 0.75, 0.01)
+        with p3:
+            un_ = st.number_input("Affected Units", 0, 100000, 5000, 500)
+            dd_ = st.number_input("Delay (days)", 0, 60, 5)
+            rv_ = st.number_input("Revenue at Risk (USD)", 0, 5000000, 400000, 50000)
+
+        if st.button("Run Company Model Prediction", type="primary"):
+            payload = {"supplier_country": sc_, "product_line": pl_, "disruption_type": dt_,
+                       "region": rg_, "route_id": rt_, "supplier_reliability_score": rel_,
+                       "affected_units": float(un_), "delay_days": float(dd_),
+                       "revenue_at_risk_usd": float(rv_), "date": "2025-06-01", "supplier_name": f"{sc_} Supplier"}
+            with st.spinner("Running company model…"):
+                result = api_post("/company/predict", json=payload)
+            if result:
+                lbl = result.get("label", "UNKNOWN")
+                clr = get_risk_color_local(lbl)
+                conf = int(result.get("confidence", 0) * 100)
+                r1, r2, r3 = st.columns(3)
+                with r1: stat_card("Predicted Risk", lbl, "🎯", clr)
+                with r2: stat_card("Confidence", f"{conf}%", "📊", THEME["cyan"])
+                with r3: stat_card("Revenue at Risk", f"${rv_:,}", "💰", THEME["amber"])
+                st.markdown(f"""
+                    <div style="background:{clr}12;border:1px solid {clr}44;border-radius:10px;padding:16px;margin-top:12px;">
+                        <span style="color:{THEME['text']};font-size:0.88rem;">
+                        <b>Disruption:</b> {dt_.replace('_',' ').title()} &nbsp;|&nbsp;
+                        <b>Region:</b> {rg_} &nbsp;|&nbsp; <b>Delay:</b> {dd_}d &nbsp;|&nbsp;
+                        <b>Units:</b> {un_:,} &nbsp;|&nbsp; <b>Model:</b> {result.get('model','?')}
+                        </span>
+                    </div>""", unsafe_allow_html=True)
+            else:
+                st.error("Prediction failed.")
