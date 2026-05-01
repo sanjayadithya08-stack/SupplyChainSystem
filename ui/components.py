@@ -107,6 +107,25 @@ def render_risk_card(prediction: dict):
     except Exception as e:
         st.error(f"Error rendering risk card: {e}")
 
+def render_llm_summary(plan: dict):
+    """Show an AI-generated executive summary if Gemini produced the plan."""
+    summary = plan.get("llm_summary")
+    generated_by = plan.get("generated_by", "rule-engine")
+    if summary:
+        badge = "🤖 AI-Generated (Gemini)" if "gemini" in generated_by else "⚙️ Rule Engine"
+        st.markdown(
+            f"""
+            <div style="padding:16px; border-radius:10px; border-left: 5px solid #0061ff; 
+                        background-color: rgba(0,97,255,0.07); margin-bottom:15px;">
+                <div style="font-size:0.75em; font-weight:700; color:#0061ff; margin-bottom:6px; text-transform:uppercase; letter-spacing:1px;">{badge}</div>
+                <p style="margin:0; font-size:0.95em; font-style: italic;">"{summary}"</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    else:
+        st.caption("⚙️ Rule Engine | Add `GEMINI_API_KEY` to `.env` to enable AI summaries.")
+
 def render_action_checklist(actions: list, title: str):
     if not actions: return
     st.markdown(f"**{title}**")
@@ -117,6 +136,8 @@ def render_prevention_plan(plan: dict):
     try:
         st.subheader("🛡️ Prevention Action Plan")
         
+        render_llm_summary(plan)
+        
         priority = plan.get("priority", "P3")
         cost = plan.get("estimated_cost_impact", "Unknown")
         st.info(f"**Priority:** {priority} | **Est. Cost Impact:** {cost}")
@@ -126,12 +147,21 @@ def render_prevention_plan(plan: dict):
         with t2: render_action_checklist(plan.get("short_term_actions", []), "Short-term Actions")
         with t3: render_action_checklist(plan.get("long_term_actions", []), "Long-term Actions")
         
+        inv = plan.get("inventory_recommendations", [])
+        if inv:
+            st.markdown("---")
+            st.markdown("**📦 Inventory Recommendations:**")
+            for r in inv: st.write(f"- {r}")
+        
         alts = plan.get("supplier_alternatives", [])
         if alts:
             st.markdown("---")
             st.markdown("**🔄 Recommended Supplier Alternatives:**")
             for alt in alts:
-                st.write(f"- {alt['name']} ({alt['country']} - Tier {alt['tier']})")
+                name = alt.get('name', alt) if isinstance(alt, dict) else alt
+                country = alt.get('country', '') if isinstance(alt, dict) else ''
+                tier = alt.get('tier', '') if isinstance(alt, dict) else ''
+                st.write(f"- {name} ({country} — Tier {tier})" if country else f"- {name}")
                 
     except Exception as e:
         st.error(f"Error rendering prevention plan: {e}")

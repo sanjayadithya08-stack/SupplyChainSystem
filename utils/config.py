@@ -33,7 +33,24 @@ class Config:
     
     # Alert Recipients
     ALERT_EMAIL = os.getenv("ALERT_EMAIL", "ops@yourcompany.com")
-    ALERT_RECIPIENTS = [ALERT_EMAIL, "supplychain-exec@yourcompany.com", "it-sec@yourcompany.com"]
+    ALERT_RECIPIENTS = [ALERT_EMAIL]
+
+    # External API Keys
+    NEWS_API_KEY = os.getenv("NEWS_API_KEY", "")
+    WEATHER_API_KEY = os.getenv("WEATHER_API_KEY", "")
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+
+    # SMTP Email
+    SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+    SMTP_USER = os.getenv("SMTP_USER", "")
+    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+
+    # Slack
+    SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL", "")
+
+    # Database
+    DB_PATH = os.path.join(PROJECT_ROOT, "data", "supplychain.db")
     
     # Master Lists
     REGIONS = [
