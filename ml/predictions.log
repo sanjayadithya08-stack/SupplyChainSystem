@@ -1,0 +1,5 @@
+{"timestamp": "2026-04-28T16:35:56.159166", "text_snippet": "[NEWS]  [WEATHER] clear severity low wind 150kph [GEO] no specific geopolitical events reported", "risk": "LOW", "confidence": 0.508}
+{"timestamp": "2026-04-28T16:36:01.451457", "text_snippet": "[NEWS]  [WEATHER] mixed severity medium wind 300kph [GEO] 72 magnitude earthquake near major port es...", "risk": "CRITICAL", "confidence": 0.2878}
+{"timestamp": "2026-04-28T16:36:13.098614", "text_snippet": "[NEWS] truck driver shortage delays uk deliveries [WEATHER] clear skies low wind [GEO] no major geop...", "risk": "LOW", "confidence": 0.3438}
+{"timestamp": "2026-04-28T16:36:23.944299", "text_snippet": "Normal operations across all global shipping lanes.", "risk": "LOW", "confidence": 0.4482}
+{"timestamp": "2026-04-28T16:36:26.535877", "text_snippet": "Category 4 hurricane approaching major Florida port.", "risk": "CRITICAL", "confidence": 0.4426}
