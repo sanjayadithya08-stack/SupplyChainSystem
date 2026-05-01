@@ -175,12 +175,13 @@ with tab3:
         render_supplier_table(suppliers)
     with route_tab:
         routes = api_get("/routes") or []
+        shipments = api_get("/shipments/live") or []
         if routes:
             critical = sum(1 for r in routes if r.get("risk_level") == "CRITICAL")
             rm1, rm2 = st.columns(2)
             rm1.metric("Total Routes", len(routes))
             rm2.metric("🔴 Critical Routes", critical)
-        render_route_map(routes)
+        render_route_map(routes, shipments)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 4 — Analytics (Company Intel)

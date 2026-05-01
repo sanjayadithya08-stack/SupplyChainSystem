@@ -281,22 +281,98 @@ def render_prevention_plan(plan: dict, uid: str = ""):
     except Exception as e:
         st.error(f"Plan render error: {e}")
 
-def render_route_map(routes: list):
+def render_route_map(routes: list, shipments: list = None):
     try:
+        from utils.geo_coords import HUB_COORDS
+        import plotly.graph_objects as go
+        
         if not routes:
-            st.warning("No routes found.")
+            st.warning("No routes found for mapping.")
             return
-        df = pd.DataFrame([r if isinstance(r, dict) else r.__dict__ for r in routes])
-        if "via_ports" in df.columns:
-            df["via_ports"] = df["via_ports"].apply(lambda x: ", ".join(x) if isinstance(x, list) else x)
+            
+        fig = go.Figure()
+        
+        # 1. Draw Routes as Arcs/Lines
+        for r in routes:
+            origin = r.get("origin_city", "Unknown")
+            dest = r.get("dest_city", "Unknown")
+            risk = r.get("risk_level", "LOW")
+            color = get_risk_color(risk)
+            
+            o_coords = HUB_COORDS.get(origin)
+            d_coords = HUB_COORDS.get(dest)
+            
+            if o_coords and d_coords:
+                fig.add_trace(go.Scattergeo(
+                    locationmode = 'ISO-3',
+                    lon = [o_coords['lon'], d_coords['lon']],
+                    lat = [o_coords['lat'], d_coords['lat']],
+                    mode = 'lines',
+                    line = dict(width = 2, color = color),
+                    opacity = 0.6,
+                    name = f"{r.get('id')}: {origin} → {dest}",
+                    hoverinfo = 'text',
+                    text = f"Route: {r.get('id')}<br>Status: {risk}<br>Avg Delay: {r.get('avg_delay_days')}d"
+                ))
 
+        # 2. Draw Active Shipments as pulsing dots if provided
+        if shipments:
+            ship_lats = []
+            ship_lons = []
+            ship_text = []
+            ship_colors = []
+            for s in shipments:
+                if s.get("status") == "Delivered": continue
+                # Place shipment at a rough midpoint for visualization
+                o = HUB_COORDS.get(s.get("origin"))
+                d = HUB_COORDS.get(s.get("destination"))
+                if o and d:
+                    # Move 30% along the path for "In Transit"
+                    frac = 0.3 if s.get("status") == "In Transit" else 0.1
+                    lat = o['lat'] + (d['lat'] - o['lat']) * frac
+                    lon = o['lon'] + (d['lon'] - o['lon']) * frac
+                    ship_lats.append(lat)
+                    ship_lons.append(lon)
+                    ship_colors.append(THEME["cyan"])
+                    ship_text.append(f"Shipment: {s.get('id')}<br>SKU: {s.get('sku')}<br>Value: ${s.get('value_usd'):,}")
+
+            fig.add_trace(go.Scattergeo(
+                lon = ship_lons, lat = ship_lats,
+                mode = 'markers',
+                marker = dict(size = 10, color = ship_colors, symbol = 'triangle-right',
+                             line = dict(width=1, color='white')),
+                name = 'Active Shipments',
+                text = ship_text, hoverinfo = 'text'
+            ))
+
+        fig.update_layout(
+            title_text = 'Global Supply Chain Network & Active Risk Zones',
+            showlegend = False,
+            geo = dict(
+                showland = True, landcolor = THEME["card"],
+                showocean = True, oceancolor = THEME["bg"],
+                showcountries = True, countrycolor = THEME["border"],
+                projection_type = 'equirectangular',
+                bgcolor = "rgba(0,0,0,0)"
+            ),
+            margin = dict(l=0, r=0, t=40, b=0),
+            height = 500,
+            paper_bgcolor = "rgba(0,0,0,0)",
+            plot_bgcolor = "rgba(0,0,0,0)",
+            font = dict(color = THEME["text"])
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Also show the table below for detail
+        df = pd.DataFrame([r if isinstance(r, dict) else r.__dict__ for r in routes])
         def highlight_risk(val):
             c = get_risk_color(str(val))
-            return f"background-color:{c}25;color:{c};font-weight:700;border-radius:4px;"
-
+            return f"background-color:{c}25;color:{c};font-weight:700;"
         st.dataframe(df.style.map(highlight_risk, subset=["risk_level"]), use_container_width=True)
+        
     except Exception as e:
-        st.error(f"Route render error: {e}")
+        st.error(f"Route map render error: {e}")
 
 def render_supplier_table(suppliers: list):
     try:
