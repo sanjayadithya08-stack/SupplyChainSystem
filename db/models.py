@@ -33,6 +33,18 @@ class RouteModel(Base):
     transit_days = Column(Integer)
     risk_level   = Column(String)
 
+class ShipmentModel(Base):
+    __tablename__ = "shipments"
+    id              = Column(String, primary_key=True)
+    sku             = Column(String)
+    supplier_id     = Column(String)
+    receiver_id     = Column(String)
+    route_id        = Column(String)
+    status          = Column(String) # In Transit, Pending, Delayed, Delivered
+    estimated_arrival = Column(String) # YYYY-MM-DD
+    value_usd       = Column(Float)
+    units           = Column(Integer)
+
 def get_session() -> Session:
     return Session(engine)
 
@@ -74,6 +86,21 @@ def _seed():
         ("R11","Cape Town","Rotterdam","South Atlantic","Hapag-Lloyd",20,"MEDIUM"),
         ("R12","Mumbai","Singapore","Bay of Bengal","PIL",7,"MEDIUM"),
     ]
+    
+    from datetime import datetime, timedelta
+    now = datetime.now()
+    
+    shipments = [
+        ("SHP-001", "SKU-MC01", "S001", "TECH-HQ-LA", "R6", "In Transit", (now + timedelta(days=5)).strftime("%Y-%m-%d"), 1450000.0, 10000),
+        ("SHP-002", "SKU-CT03", "S007", "TECH-HQ-LA", "R1", "In Transit", (now + timedelta(days=2)).strftime("%Y-%m-%d"), 850000.0, 5000),
+        ("SHP-003", "SKU-AP01", "S003", "TECH-NY-HUB", "R3", "In Transit", (now + timedelta(days=8)).strftime("%Y-%m-%d"), 420000.0, 2000),
+        ("SHP-004", "SKU-PL01", "S009", "TECH-TX-HUB", "R8", "Pending", (now + timedelta(days=12)).strftime("%Y-%m-%d"), 150000.0, 3000),
+        ("SHP-005", "SKU-RM02", "S012", "TECH-SYD", "R10", "In Transit", (now + timedelta(days=4)).strftime("%Y-%m-%d"), 200000.0, 4500),
+        ("SHP-006", "SKU-PH01", "S013", "TECH-EU-HUB", "R4", "Delayed", (now + timedelta(days=15)).strftime("%Y-%m-%d"), 600000.0, 1500),
+        ("SHP-007", "SKU-MC02", "S002", "TECH-VAN", "R9", "In Transit", (now + timedelta(days=7)).strftime("%Y-%m-%d"), 920000.0, 8000),
+        ("SHP-008", "SKU-FB01", "S005", "TECH-TX-HUB", "R8", "In Transit", (now + timedelta(days=1)).strftime("%Y-%m-%d"), 80000.0, 5000),
+    ]
+
     with get_session() as s:
         if s.query(SupplierModel).count() == 0:
             for row in suppliers:
@@ -83,6 +110,11 @@ def _seed():
             for row in routes:
                 s.add(RouteModel(id=row[0],origin=row[1],destination=row[2],via_ports=row[3],
                                  carrier=row[4],transit_days=row[5],risk_level=row[6]))
+        if s.query(ShipmentModel).count() == 0:
+            for row in shipments:
+                s.add(ShipmentModel(id=row[0],sku=row[1],supplier_id=row[2],receiver_id=row[3],
+                                    route_id=row[4],status=row[5],estimated_arrival=row[6],
+                                    value_usd=row[7],units=row[8]))
         s.commit()
 
 if __name__ == "__main__":

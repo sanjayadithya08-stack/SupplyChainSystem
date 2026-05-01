@@ -159,6 +159,25 @@ async def company_stats():
     except Exception as e:
         return {"error": str(e)}
 
+# ── Live Shipments & Threat Radar ──────────────────────────────────────────────
+@app.get("/shipments/live")
+async def get_live_shipments():
+    """Return all active shipments with enriched data."""
+    try:
+        from services.shipment_service import get_enriched_shipments
+        return get_enriched_shipments()
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/shipments/threats")
+async def get_shipment_threats():
+    """Run live threat engine on active shipments."""
+    try:
+        from ml.live_threat_engine import analyze_live_shipments
+        return analyze_live_shipments()
+    except Exception as e:
+        return {"error": str(e)}
+
 @app.get("/news")
 async def get_live_news(region: str = Query("global")):
     try:
