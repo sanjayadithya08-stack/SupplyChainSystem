@@ -10,3 +10,5 @@ requests==2.31.0
 sqlalchemy==2.0.30
 google-generativeai==0.7.2
 pydantic==2.7.1
+psutil>=5.9
+pyarrow>=14,<17

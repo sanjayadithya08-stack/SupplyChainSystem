@@ -1,6 +1,6 @@
 """
 Upgrade 3: SQLite database for suppliers and routes.
-Run `python db/init_db.py` once to create and seed the database.
+Run `python init_all_db.py` (or `python run.py seed`) to create and seed the database.
 """
 import sys, os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

@@ -86,7 +86,7 @@ with tab1:
     
     shipments = api_get("/shipments/live") or []
     
-    if shipments and isinstance(shipments, list) and "error" not in shipments[0]:
+    if shipments and isinstance(shipments, list):
         k1, k2, k3, k4 = st.columns(4)
         active = [s for s in shipments if s.get("status", "") != "Delivered"]
         val_transit = sum(s.get("value_usd", 0) for s in active)
@@ -120,8 +120,8 @@ with tab2:
         with st.spinner("Analyzing global events and matching against shipment routes..."):
             threats_data = api_get("/shipments/threats", timeout=20)
             
-        if not threats_data:
-            st.error("Threat scan failed.")
+        if not isinstance(threats_data, list):
+            st.error("Threat scan failed." + (f" {threats_data.get('error')}" if isinstance(threats_data, dict) else ""))
         else:
             st.success("Scan complete!")
             st.markdown("---")
@@ -175,7 +175,7 @@ with tab3:
         render_supplier_table(suppliers)
     with route_tab:
         routes = api_get("/routes") or []
-        shipments = api_get("/shipments/live") or []
+        shipments = shipments if isinstance(shipments, list) else []
         if routes:
             critical = sum(1 for r in routes if r.get("risk_level") == "CRITICAL")
             rm1, rm2 = st.columns(2)
@@ -282,24 +282,24 @@ with tab5:
         status = health.get("status", "unknown")
         uptime_m = round(health.get("uptime_seconds", 0) / 60, 1)
         arts = health.get("artefacts", {})
-        sys = health.get("system_metrics", {})
+        sys_m = health.get("system_metrics", {})
         
         with h1: stat_card("API Status", status.upper(), "🟢" if status == "healthy" else "🔴", THEME["green"] if status == "healthy" else THEME["red"])
         with h2: stat_card("Uptime", f"{uptime_m}m", "⏱️", THEME["cyan"])
         with h3: stat_card("Model", "Loaded" if health.get("model_loaded") else "Missing", "🤖", THEME["green"] if health.get("model_loaded") else THEME["red"])
         with h4: stat_card("Artefacts", f"{sum(arts.values())}/{len(arts)}", "📦", THEME["purple"])
         
-        if sys:
+        if sys_m:
             st.markdown(f"<div style='color:{THEME['muted']};font-size:0.8rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;'>Server Resources</div>", unsafe_allow_html=True)
             s1, s2, s3 = st.columns(3)
             with s1:
-                cpu = sys.get('cpu_percent', 0)
+                cpu = sys_m.get('cpu_percent', 0)
                 st.progress(cpu / 100, text=f"💻 CPU Load: {cpu}%")
             with s2:
-                mem = sys.get('memory_percent', 0)
+                mem = sys_m.get('memory_percent', 0)
                 st.progress(mem / 100, text=f"🧠 Memory: {mem}%")
             with s3:
-                disk = sys.get('disk_percent', 0)
+                disk = sys_m.get('disk_percent', 0)
                 st.progress(disk / 100, text=f"💾 Disk: {disk}%")
     
     st.markdown(f"<div style='color:{THEME['cyan']};font-weight:700;font-size:0.82rem;text-transform:uppercase;letter-spacing:0.08em;margin:16px 0 10px;'>Recent Alerts & Broadcast</div>", unsafe_allow_html=True)
@@ -323,7 +323,7 @@ with tab5:
                 else:
                     st.warning("Enter a message first.")
 
-        slack_status = "Slack [ON]" if Config.SLACK_WEBHOOK_URL and "hooks" in Config.SLACK_WEBHOOK_URL else "Slack [OFF]"
+        slack_status = "Slack [ON]" if Config.SLACK_WEBHOOK_URL else "Slack [OFF]"
         email_status = "Email [ON]" if Config.SMTP_USER else "Email [OFF]"
         st.caption(f"Channels active: {slack_status} | {email_status} | Log [ON]")
 
@@ -349,6 +349,11 @@ with tab6:
             color = get_risk_color_local(sev)
             url = n.get('url', '#')
             target = "target='_blank'" if url != '#' and url != '' else ""
+            link_html = f'''<a href="{url}" {target} style="display:inline-block;background:{THEME['cyan']}15;color:{THEME['cyan']};
+                                          padding:6px 14px;border-radius:6px;font-size:0.85rem;font-weight:600;
+                                          text-decoration:none;border:1px solid {THEME['cyan']}44;transition:all 0.2s;">
+                        Read Article 🔗
+                    </a>''' if target else ""
             
             # Format published_at
             try:
@@ -370,11 +375,7 @@ with tab6:
                         <span>🌍 {n.get('region', '').title()}</span>
                         <span>📅 {date_str}</span>
                     </div>
-                    <a href="{url}" {target} style="display:inline-block;background:{THEME['cyan']}15;color:{THEME['cyan']};
-                                          padding:6px 14px;border-radius:6px;font-size:0.85rem;font-weight:600;
-                                          text-decoration:none;border:1px solid {THEME['cyan']}44;transition:all 0.2s;">
-                        Read Article 🔗
-                    </a>
+                    {link_html}
                 </div>
             """, unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)

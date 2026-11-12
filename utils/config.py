@@ -5,6 +5,14 @@ load_dotenv()
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+
+def _real(value: str) -> str:
+    """Treat the placeholder values shipped in .env.example as unset."""
+    v = (value or "").strip()
+    if not v or "your_" in v or "your/" in v or v.startswith("your"):
+        return ""
+    return v
+
 class Config:
     # API Settings
     API_PORT = int(os.getenv("API_PORT", 8000))
@@ -35,19 +43,28 @@ class Config:
     ALERT_EMAIL = os.getenv("ALERT_EMAIL", "ops@yourcompany.com")
     ALERT_RECIPIENTS = [ALERT_EMAIL]
 
+    # Rate limiting (requests per minute per client IP; loopback is exempt)
+    RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", 300))
+
+    # Company model artefacts
+    COMPANY_MODEL_PATH = os.path.join(ARTEFACTS_DIR, "company_model.pkl")
+    COMPANY_ENCODER_PATH = os.path.join(ARTEFACTS_DIR, "company_encoders.pkl")
+    WEB_DIR = os.path.join(PROJECT_ROOT, "web")
+
     # External API Keys
-    NEWS_API_KEY = os.getenv("NEWS_API_KEY", "")
-    WEATHER_API_KEY = os.getenv("WEATHER_API_KEY", "")
-    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+    NEWS_API_KEY = _real(os.getenv("NEWS_API_KEY", ""))
+    WEATHER_API_KEY = _real(os.getenv("WEATHER_API_KEY", ""))
+    GEMINI_API_KEY = _real(os.getenv("GEMINI_API_KEY", ""))
+    GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
     # SMTP Email
     SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
     SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
-    SMTP_USER = os.getenv("SMTP_USER", "")
-    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+    SMTP_USER = _real(os.getenv("SMTP_USER", ""))
+    SMTP_PASSWORD = _real(os.getenv("SMTP_PASSWORD", ""))
 
     # Slack
-    SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL", "")
+    SLACK_WEBHOOK_URL = _real(os.getenv("SLACK_WEBHOOK_URL", ""))
 
     # Database
     DB_PATH = os.path.join(PROJECT_ROOT, "data", "supplychain.db")

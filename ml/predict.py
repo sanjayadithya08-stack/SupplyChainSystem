@@ -7,11 +7,18 @@ from utils.config import Config
 from utils.text_preprocessing import clean_text, detect_disruption_type, estimate_affected_region
 
 PIPELINE = None
-try:
-    if os.path.exists(Config.PIPELINE_PATH):
-        PIPELINE = joblib.load(Config.PIPELINE_PATH)
-except Exception as e:
-    print(f"Warning: Failed to load pipeline - {e}")
+
+def reload_pipeline():
+    """(Re)load the text pipeline from disk - called after first-run training."""
+    global PIPELINE
+    try:
+        if os.path.exists(Config.PIPELINE_PATH):
+            PIPELINE = joblib.load(Config.PIPELINE_PATH)
+    except Exception as e:
+        print(f"Warning: Failed to load pipeline - {e}")
+    return PIPELINE
+
+reload_pipeline()
 
 def predict_risk(text: str) -> dict:
     """Returns {label, confidence, disruption_type, affected_regions, estimated_duration_days}"""
