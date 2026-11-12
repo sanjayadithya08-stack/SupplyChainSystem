@@ -18,7 +18,7 @@ def _get_model():
     try:
         import google.generativeai as genai
         genai.configure(api_key=key)
-        _GEMINI_MODEL = genai.GenerativeModel("gemini-1.5-flash")
+        _GEMINI_MODEL = genai.GenerativeModel(Config.GEMINI_MODEL)
         print("[Gemini] LLM engine loaded successfully.")
         return _GEMINI_MODEL
     except Exception as e:
@@ -67,7 +67,7 @@ Generate a precise, actionable prevention response plan. Respond ONLY with a val
                 text = text[4:]
         import json
         plan = json.loads(text.strip())
-        plan["generated_by"] = "gemini-1.5-flash"
+        plan["generated_by"] = Config.GEMINI_MODEL
         return plan
     except Exception as e:
         print(f"[Gemini] Plan generation failed: {e}")
@@ -104,13 +104,13 @@ def _rule_based_plan(prediction: dict) -> dict:
             "inventory_recommendations": ["Increase safety stock by 30%"]
         },
         "weather": {
-            "immediate_actions": [f"Suspend shipments to {regions[0]}", "Issue carrier weather alerts", "Check vessel tracking"],
+            "immediate_actions": [f"Suspend shipments to {(regions or ['global'])[0]}", "Issue carrier weather alerts", "Check vessel tracking"],
             "short_term_actions": ["Switch to inland routes if available", "Extend lead time commitments"],
             "long_term_actions": ["Pre-position inventory at safe hubs", "Build seasonal weather buffer"],
             "inventory_recommendations": ["Pre-build 2-week buffer stock"]
         },
         "war": {
-            "immediate_actions": ["Escalate to executive team", f"Blacklist routes through {regions[0]}", "Issue force majeure notice"],
+            "immediate_actions": ["Escalate to executive team", f"Blacklist routes through {(regions or ['global'])[0]}", "Issue force majeure notice"],
             "short_term_actions": ["Activate secondary supplier network", "Review insurance coverage"],
             "long_term_actions": ["Trigger full supplier diversification audit"],
             "inventory_recommendations": ["Increase safety stock to 60-day cover"]
@@ -150,9 +150,15 @@ def _rule_based_plan(prediction: dict) -> dict:
     plan.update(playbook)
     return plan
 
-def generate_prevention_plan(prediction: dict) -> dict:
-    """Main entry: Try Gemini first, fall back to rule engine."""
-    llm_plan = _llm_prevention_plan(prediction)
-    if llm_plan:
-        return llm_plan
-    return _rule_based_plan(prediction)
+_PLAN_KEYS = ("immediate_actions", "short_term_actions", "long_term_actions",
+              "estimated_cost_impact", "priority")
+
+def generate_prevention_plan(prediction: dict, allow_llm: bool = True) -> dict:
+    """Main entry: Try Gemini first (when allowed), fall back to rule engine."""
+    rule_plan = _rule_based_plan(prediction)
+    if allow_llm:
+        llm_plan = _llm_prevention_plan(prediction)
+        # Only trust an LLM plan that has every required field
+        if llm_plan and all(k in llm_plan for k in _PLAN_KEYS):
+            return {**rule_plan, **llm_plan}
+    return rule_plan

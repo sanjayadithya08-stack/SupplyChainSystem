@@ -9,15 +9,15 @@ import joblib
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.config import Config
 
-COMPANY_MODEL_PATH   = os.path.join(Config.ARTEFACTS_DIR, "company_model.pkl")
-COMPANY_ENCODER_PATH = os.path.join(Config.ARTEFACTS_DIR, "company_encoders.pkl")
+COMPANY_MODEL_PATH   = Config.COMPANY_MODEL_PATH
+COMPANY_ENCODER_PATH = Config.COMPANY_ENCODER_PATH
 
 _MODEL    = None
 _ENCODERS = None
 
 def _load():
     global _MODEL, _ENCODERS
-    if _MODEL: return True
+    if _MODEL is not None: return True
     try:
         if os.path.exists(COMPANY_MODEL_PATH) and os.path.exists(COMPANY_ENCODER_PATH):
             _MODEL    = joblib.load(COMPANY_MODEL_PATH)
@@ -103,26 +103,35 @@ def predict_event(event: dict) -> dict:
         return fallback
 
 def predict_all_historical() -> list[dict]:
-    """Run predictions over the full company dataset and return enriched rows."""
+    """Run predictions over the full company dataset (one batched model call)."""
     try:
-        import csv
         path = os.path.join(Config.DATA_DIR, "company_dataset.csv")
-        rows = []
-        with open(path, newline="") as f:
-            for row in csv.DictReader(f):
-                row["affected_units"]             = float(row.get("affected_units", 0))
-                row["delay_days"]                 = float(row.get("delay_days", 0))
-                row["revenue_at_risk_usd"]        = float(row.get("revenue_at_risk_usd", 0))
-                row["supplier_reliability_score"] = float(row.get("supplier_reliability_score", 0.8))
-                result = predict_event(row)
-                result["event_id"]  = row["event_id"]
-                result["date"]      = row["date"]
-                result["actual"]    = row["label"]
-                result["correct"]   = result["label"] == row["label"]
-                result["sku"]       = row.get("sku", "")
-                result["supplier_name"] = row.get("supplier_name", "")
-                rows.append(result)
-        return rows
+        df = pd.read_csv(path)
+        rows = df.to_dict(orient="records")
+        if not _load():
+            preds, confs, model = ["UNKNOWN"] * len(rows), [0.0] * len(rows), "fallback"
+        else:
+            X = pd.DataFrame([_engineer(r) for r in rows])
+            preds = [str(p) for p in _MODEL.predict(X)]
+            confs = [round(float(max(p)), 4) for p in _MODEL.predict_proba(X)]
+            model = "company_model"
+        out = []
+        for r, label, conf in zip(rows, preds, confs):
+            out.append({
+                "label": label, "confidence": conf,
+                "revenue_at_risk_usd": float(r["revenue_at_risk_usd"]),
+                "delay_days": float(r["delay_days"]),
+                "affected_units": float(r["affected_units"]),
+                "supplier": r.get("supplier_name", "Unknown"),
+                "product_line": r.get("product_line", "Unknown"),
+                "disruption_type": r.get("disruption_type", "normal"),
+                "region": r.get("region", "global"),
+                "model": model,
+                "event_id": r["event_id"], "date": r["date"], "actual": r["label"],
+                "correct": label == r["label"], "sku": r.get("sku", ""),
+                "supplier_name": r.get("supplier_name", ""),
+            })
+        return out
     except Exception as e:
         print(f"[CompanyPredict] Historical batch error: {e}")
         return []

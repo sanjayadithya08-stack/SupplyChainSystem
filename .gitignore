@@ -5,3 +5,4 @@ __pycache__/
 logs/
 ml/artefacts/
 .pytest_cache/
+ml/predictions.log

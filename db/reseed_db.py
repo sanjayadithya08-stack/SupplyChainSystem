@@ -8,7 +8,8 @@ from utils.config import Config
 from db.models import engine, Base as Base1, SupplierModel, RouteModel, ShipmentModel, get_session
 from db.models_extended import Base as Base2, SupplierContactModel, ReceiverModel, InventoryModel, OrderModel, FinancialTrackingModel
 
-def reseed():
+def reseed(seed: int = 42):
+    random.seed(seed)
     print("=======================================================")
     print("  TechCore Supply Chain — Reseeding Live Database 2026")
     print("=======================================================")
