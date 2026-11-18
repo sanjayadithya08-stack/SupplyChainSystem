@@ -1,4 +1,4 @@
-import { createGlobe, RISK_COLORS, STATUS_COLORS } from './globe.js';
+import { createGlobe, RISK_COLORS, STATUS_COLORS, CHOKEPOINTS } from './globe.js';
 import { createBars3D } from './bars3d.js';
 
 // Same-origin by default; override with ?api=http://host:port when serving the page elsewhere.
@@ -31,7 +31,30 @@ function toast(msg, ms = 2800) {
   clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.add('hidden'), ms);
 }
 
-const state = { network: null, shipments: [], scan: null, sort: { key: 'estimated_arrival', asc: true }, loaded: {} };
+const state = { network: null, shipments: [], scan: null, sort: { key: 'estimated_arrival', asc: true }, loaded: {},
+  whatIf: { closed: new Set(), routes: new Set() }, timeDays: 0 };
+const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function etaText(eta) {
+  const d = Math.round((new Date(eta) - Date.now()) / 864e5);
+  if (Number.isNaN(d)) return '';
+  return d > 1 ? `arrives in ${d} days` : d === 1 ? 'arrives tomorrow' : d === 0 ? 'arrives today' : `${-d}d overdue`;
+}
+
+/** Animate every [data-to] number inside `root` from 0 to its target. */
+function countUp(root) {
+  $$('[data-to]', root).forEach(el => {
+    const to = +el.dataset.to, fmt = el.dataset.fmt, suffix = el.dataset.suffix || '';
+    const f = v => (fmt === 'money' ? money(v) : Math.round(v).toLocaleString()) + suffix;
+    if (reducedMotion()) { el.textContent = f(to); return; }
+    const t0 = performance.now(), dur = 1100;
+    (function step(now) {
+      const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+      el.textContent = f(to * e);
+      if (k < 1) requestAnimationFrame(step);
+    })(t0);
+  });
+}
 
 // ── Globe ───────────────────────────────────────────────────────────────────
 const tooltip = $('#tooltip');
@@ -42,14 +65,18 @@ const globe = createGlobe($('#globe'), {
     const d = ud.data;
     const html = ud.kind === 'shipment'
       ? `<div class="t">${esc(d.id)} · ${esc(d.sku)}</div><div class="s">${esc(d.origin)} → ${esc(d.destination)} · ${esc(d.status)}</div>`
-      : ud.kind === 'hub' ? `<div class="t">${esc(d.name)}</div><div class="s">Port / hub · ${esc(d.region)}</div>`
+      : ud.kind === 'hub' ? `<div class="t">${esc(d.name)}</div><div class="s">Port / hub · ${esc(d.region)}${d.value_usd ? ` · ${money(d.value_usd)} moving` : ''}</div>`
+      : ud.kind === 'chokepoint' ? `<div class="t">${esc(d.name)}</div><div class="s">Chokepoint · ${esc(d.note)} · click to simulate</div>`
       : ud.kind === 'event' ? `<div class="t">${esc(d.country)} · ${esc(d.event_type)}</div><div class="s">${esc(d.severity)} — ${esc(d.description)}</div>`
       : '';
     tooltip.innerHTML = html;
     tooltip.style.left = `${e.clientX + 14}px`; tooltip.style.top = `${e.clientY + 14}px`;
     tooltip.classList.remove('hidden');
   },
-  onAutoRotateChange(on) { const cb = $('input[data-layer="rotate"]'); if (cb) cb.checked = on; },
+  onAutoRotateChange(on) {
+    const cb = $('input[data-layer="rotate"]'); if (cb) cb.checked = on;
+    $('#dock [data-act="rotate"]')?.setAttribute('aria-pressed', String(on));
+  },
 });
 
 $$('#layerToggles input').forEach(cb => cb.addEventListener('change', () => {
@@ -59,6 +86,7 @@ $$('#layerToggles input').forEach(cb => cb.addEventListener('change', () => {
 
 function renderDetail(ud) {
   const box = $('#detail');
+  state.selected = ud;
   if (!ud) { box.innerHTML = '<h3>Selection</h3><p class="muted">Click a shipment, hub or event on the globe to inspect it.</p>'; return; }
   const d = ud.data;
   if (ud.kind === 'shipment') {
@@ -77,9 +105,12 @@ function renderDetail(ud) {
         <dt>Units</dt><dd>${num(d.units)}</dd>
         <dt>Value</dt><dd>${money(d.value_usd)}</dd>
         ${risk ? `<dt>Predicted risk</dt><dd>${riskPill(risk.prediction.label)}</dd>` : ''}
+        ${state.whatIf.routes.has(d.route_id) ? `<dt>What-if</dt><dd>${pill('LANE CUT', RISK_COLORS.CRITICAL)}</dd>` : ''}
       </dl>
       <div class="progress"><i style="width:${Math.round((d.progress ?? 0) * 100)}%"></i></div>
-      <span class="muted small">${Math.round((d.progress ?? 0) * 100)}% of voyage complete</span>`;
+      <div style="display:flex;justify-content:space-between"><span class="muted small">${Math.round((d.progress ?? 0) * 100)}% of voyage complete</span>
+        <span class="eta-chip">${etaText(d.estimated_arrival)}</span></div>
+      <div class="detail-actions"><button class="btn" data-detail="follow">Zoom to ship</button><button class="btn" data-detail="clear">Clear</button></div>`;
   } else if (ud.kind === 'hub') {
     const out = state.shipments.filter(s => s.origin === d.name), inn = state.shipments.filter(s => s.destination === d.name);
     box.innerHTML = `<h3>Hub</h3><strong style="font-size:18px">${esc(d.name)}</strong>
@@ -87,7 +118,15 @@ function renderDetail(ud) {
         <dt>Region</dt><dd>${esc(d.region)}</dd>
         <dt>Outbound</dt><dd>${out.length} shipments · ${money(out.reduce((a, s) => a + s.value_usd, 0))}</dd>
         <dt>Inbound</dt><dd>${inn.length} shipments · ${money(inn.reduce((a, s) => a + s.value_usd, 0))}</dd>
-      </dl>`;
+      </dl>
+      <div class="detail-actions"><button class="btn" data-detail="clear">Clear</button></div>`;
+  } else if (ud.kind === 'chokepoint') {
+    const on = state.whatIf.closed.has(d.id);
+    box.innerHTML = `<h3>Chokepoint</h3>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><strong style="font-size:18px">${esc(d.name)}</strong>${on ? pill('CLOSED', RISK_COLORS.CRITICAL) : pill('OPEN', RISK_COLORS.LOW)}</div>
+      <p class="muted">${esc(d.note)} · ${d.lat.toFixed(1)}°, ${d.lon.toFixed(1)}°</p>
+      <div class="detail-actions"><button class="btn ${on ? '' : 'primary'}" data-detail="choke" data-id="${esc(d.id)}">${on ? 'Reopen' : 'Simulate closure'}</button>
+      <button class="btn" data-detail="clear">Clear</button></div>`;
   } else if (ud.kind === 'event') {
     box.innerHTML = `<h3>Geo event</h3>
       <div style="display:flex;justify-content:space-between;align-items:center"><strong style="font-size:18px">${esc(d.country)}</strong>${riskPill(d.severity)}</div>
@@ -99,6 +138,7 @@ function renderDetail(ud) {
 // ── Navigation ──────────────────────────────────────────────────────────────
 const loaders = { command: loadCommand, shipments: renderShipments, threats: () => {}, analytics: loadAnalytics, intel: loadIntel, system: loadSystem };
 function show(view) {
+  if (view !== 'command' && tour.active) stopTour();
   $$('.tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.view === view)));
   $$('.view').forEach(v => v.classList.toggle('active', v.dataset.view === view));
   document.body.dataset.view = view;
@@ -141,8 +181,9 @@ async function loadHealth() {
 }
 
 // ── Command ─────────────────────────────────────────────────────────────────
-function kpi(label, value, color) {
-  return `<div class="kpi" style="--c:${color}"><div class="v">${value}</div><div class="l">${esc(label)}</div></div>`;
+function kpi(label, value, color, count) {
+  const attrs = count ? ` data-to="${count.to}" data-fmt="${count.fmt || 'int'}" data-suffix="${esc(count.suffix || '')}"` : '';
+  return `<div class="kpi" style="--c:${color}"><div class="v"${attrs}>${value}</div><div class="l">${esc(label)}</div></div>`;
 }
 
 async function loadCommand() {
@@ -153,11 +194,16 @@ async function loadCommand() {
     const active = net.shipments.filter(s => s.status !== 'Delivered');
     const delayed = active.filter(s => s.status === 'Delayed').length;
     const critRoutes = net.routes.filter(r => r.risk_level === 'CRITICAL' || r.risk_level === 'HIGH').length;
+    const inTransit = active.reduce((a, s) => a + s.value_usd, 0);
     $('#kpis').innerHTML =
-      kpi('Active shipments', active.length, '#38e1ff') +
-      kpi('Value in transit', money(active.reduce((a, s) => a + s.value_usd, 0)), '#2fe39a') +
-      kpi('Delayed', delayed, delayed ? '#ff3d71' : '#2fe39a') +
-      kpi('High-risk lanes', `${critRoutes}/${net.routes.length}`, '#ff8a3d');
+      kpi('Active shipments', active.length, '#38e1ff', { to: active.length }) +
+      kpi('Value in transit', money(inTransit), '#2fe39a', { to: inTransit, fmt: 'money' }) +
+      kpi('Delayed', delayed, delayed ? '#ff3d71' : '#2fe39a', { to: delayed }) +
+      kpi('High-risk lanes', `${critRoutes}/${net.routes.length}`, '#ff8a3d', { to: critRoutes, suffix: `/${net.routes.length}` });
+    countUp($('#kpis'));
+    renderChokeChips();
+    if (state.whatIf.closed.size) applyWhatIf();
+    updateTimeStats();
     const hot = net.events.filter(e => ['HIGH', 'CRITICAL'].includes(e.severity))
       .sort((a, b) => (b.severity === 'CRITICAL') - (a.severity === 'CRITICAL'));
     $('#hotspots').innerHTML = hot.map((e, i) => `
@@ -174,13 +220,17 @@ async function loadCommand() {
 }
 
 // ── Shipments ───────────────────────────────────────────────────────────────
-function renderShipments() {
+function filteredShipments() {
   const q = $('#shipSearch').value.trim().toLowerCase(), st = $('#shipStatus').value;
   const { key, asc } = state.sort;
-  const rows = state.shipments
+  return state.shipments
     .filter(s => !st || s.status === st)
     .filter(s => !q || [s.id, s.sku, s.supplier_name, s.origin, s.destination, s.carrier].some(v => String(v).toLowerCase().includes(q)))
     .sort((a, b) => (a[key] > b[key] ? 1 : a[key] < b[key] ? -1 : 0) * (asc ? 1 : -1));
+}
+function renderShipments() {
+  const { key, asc } = state.sort;
+  const rows = filteredShipments();
   $('#shipTable tbody').innerHTML = rows.map(s => `
     <tr data-id="${esc(s.id)}">
       <td><strong>${esc(s.id)}</strong><div class="sub">${esc(s.sku)}</div></td>
@@ -311,8 +361,11 @@ async function loadAnalytics() {
     $('#accuracy').innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
     const s = await api('/company/stats');
     $('#aKpis').innerHTML =
-      kpi('Events', s.total_events, '#38e1ff') + kpi('Revenue at risk', money(s.total_revenue_at_risk), '#ff3d71') +
-      kpi('Avg delay', `${s.avg_delay_days}d`, '#ffc845') + kpi('Units hit', num(s.total_units_affected), '#7c6cff');
+      kpi('Events', s.total_events, '#38e1ff', { to: s.total_events }) +
+      kpi('Revenue at risk', money(s.total_revenue_at_risk), '#ff3d71', { to: s.total_revenue_at_risk, fmt: 'money' }) +
+      kpi('Avg delay', `${s.avg_delay_days}d`, '#ffc845') +
+      kpi('Units hit', num(s.total_units_affected), '#7c6cff', { to: s.total_units_affected });
+    countUp($('#aKpis'));
 
     const regions = Object.entries(s.by_region).map(([k, v], i) => ({ label: k.replace(/-/g, ' '), value: v, color: REGION_COLORS[i % REGION_COLORS.length] }));
     bars3d?.dispose();
@@ -414,6 +467,322 @@ $('#alertForm').addEventListener('submit', async e => {
   } catch (err) { toast(`Broadcast failed: ${err.message}`); }
 });
 
+// ── Selection actions ───────────────────────────────────────────────────────
+$('#detail').addEventListener('click', e => {
+  const b = e.target.closest('[data-detail]'); if (!b) return;
+  const sel = state.selected;
+  if (b.dataset.detail === 'clear') globe.clearSelection();
+  else if (b.dataset.detail === 'follow' && sel?.kind === 'shipment') globe.focusShipment(sel.data.id, 1.75);
+  else if (b.dataset.detail === 'choke') { toggleChoke(b.dataset.id); globe.selectChokepoint(b.dataset.id); }
+});
+
+// ── Time travel ─────────────────────────────────────────────────────────────
+const transitDays = s => state.network?.routes.find(r => r.id === s.route_id)?.transit_days || 14;
+function setTimeDays(d) {
+  d = Math.max(0, Math.min(30, d));
+  state.timeDays = d;
+  $('#timeRange').value = d;
+  globe.setTimeOffset(d);
+  const when = new Date(Date.now() + d * 864e5);
+  $('#timeLabel').textContent = d === 0 ? 'Now'
+    : `+${d % 1 ? d.toFixed(2).replace(/0$/, '') : d}d · ${when.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${when.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
+  updateTimeStats();
+}
+function updateTimeStats() {
+  const d = state.timeDays;
+  if (!d) { $('#timeStats').textContent = 'Drag to project every voyage forward. Arrived ships drop off the globe; the day/night line follows the clock.'; return; }
+  const moving = state.shipments.filter(s => s.status !== 'Delivered' && s.status !== 'Pending');
+  const landed = moving.filter(s => (s.progress ?? 0) + d / transitDays(s) >= 1);
+  $('#timeStats').innerHTML = `<b>${landed.length}</b> of ${moving.length} moving shipments landed · <b>${money(landed.reduce((a, s) => a + s.value_usd, 0))}</b> delivered`;
+}
+$('#timeRange').addEventListener('input', e => { stopTimePlay(); setTimeDays(+e.target.value); });
+let timeTimer = null;
+const PLAY_ICON = '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M7 5v14l12-7z" fill="currentColor"/></svg>';
+const PAUSE_ICON = '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor"/></svg>';
+function stopTimePlay() {
+  clearInterval(timeTimer); timeTimer = null;
+  const b = $('#timePlay'); b.classList.remove('on'); b.innerHTML = PLAY_ICON; b.setAttribute('aria-label', 'Play time forward');
+}
+$('#timePlay').addEventListener('click', () => {
+  if (timeTimer) return stopTimePlay();
+  if (state.timeDays >= 30) setTimeDays(0);
+  const b = $('#timePlay'); b.classList.add('on'); b.innerHTML = PAUSE_ICON; b.setAttribute('aria-label', 'Pause');
+  timeTimer = setInterval(() => {
+    setTimeDays(state.timeDays + 0.25);
+    if (state.timeDays >= 30) stopTimePlay();
+  }, 90);
+});
+
+// ── What-if simulator ───────────────────────────────────────────────────────
+function renderChokeChips() {
+  $('#chokeChips').innerHTML = CHOKEPOINTS.map(c =>
+    `<button class="chip" data-choke="${c.id}" aria-pressed="${state.whatIf.closed.has(c.id)}" title="${esc(c.note)}">${esc(c.name)}</button>`).join('');
+}
+$('#chokeChips').addEventListener('click', e => {
+  const b = e.target.closest('[data-choke]'); if (!b) return;
+  toggleChoke(b.dataset.choke);
+  if (state.whatIf.closed.has(b.dataset.choke)) {
+    const c = CHOKEPOINTS.find(x => x.id === b.dataset.choke);
+    globe.flyTo(c.lat, c.lon, 2.8);
+  }
+});
+function toggleChoke(id) {
+  const s = state.whatIf.closed;
+  s.has(id) ? s.delete(id) : s.add(id);
+  applyWhatIf();
+}
+function applyWhatIf() {
+  const routes = new Set(globe.setClosures([...state.whatIf.closed]));
+  state.whatIf.routes = routes;
+  renderChokeChips();
+  const box = $('#whatIf');
+  if (!state.whatIf.closed.size) {
+    box.innerHTML = '<p class="muted small">Pick one or more chokepoints to see which lanes, shipments and how much value would be cut off.</p>';
+    return;
+  }
+  const hit = state.shipments.filter(s => s.status !== 'Delivered' && routes.has(s.route_id)).sort((a, b) => b.value_usd - a.value_usd);
+  const value = hit.reduce((a, s) => a + s.value_usd, 0);
+  const total = state.network?.routes.length || 0;
+  box.innerHTML = `
+    <div class="stats">
+      <div><b data-to="${routes.size}" data-suffix="/${total}">${routes.size}/${total}</b><span>Lanes cut</span></div>
+      <div><b data-to="${hit.length}">${hit.length}</b><span>Shipments</span></div>
+      <div><b data-to="${value}" data-fmt="money">${money(value)}</b><span>Value stranded</span></div>
+    </div>
+    ${hit.length ? `<ul class="list">${hit.slice(0, 5).map(s => `
+      <li class="clickable" data-ship="${esc(s.id)}"><div class="grow"><div class="t">${esc(s.id)} · ${esc(s.supplier_name)}</div>
+      <div class="s">${esc(s.origin)} → ${esc(s.destination)}</div></div><div class="t">${money(s.value_usd)}</div></li>`).join('')}</ul>
+      ${hit.length > 5 ? `<p class="muted small">+${hit.length - 5} more on the globe in red.</p>` : ''}`
+      : '<p class="muted small">No active shipment uses these lanes. The network can absorb this closure.</p>'}
+    <div class="detail-actions"><button class="btn" data-reopen>Reopen all</button></div>
+    <p class="muted small">Lanes are matched by their waypoints and their great-circle path; real routings may differ.</p>`;
+  countUp(box);
+}
+$('#whatIf').addEventListener('click', e => {
+  const li = e.target.closest('[data-ship]');
+  if (li) return globe.focusShipment(li.dataset.ship);
+  if (e.target.closest('[data-reopen]')) { state.whatIf.closed.clear(); applyWhatIf(); }
+});
+
+// ── Globe dock ──────────────────────────────────────────────────────────────
+function toggleFullscreen() {
+  if (document.fullscreenElement) document.exitFullscreen?.();
+  else document.documentElement.requestFullscreen?.().catch(() => toast('Fullscreen is not available here'));
+}
+function saveSnapshot() {
+  const a = document.createElement('a');
+  a.href = globe.snapshot(); a.download = `techcore-orbit-${new Date().toISOString().slice(0, 10)}.png`;
+  a.click(); toast('Snapshot saved');
+}
+const dockActions = {
+  zoomIn: () => globe.zoomBy(0.8), zoomOut: () => globe.zoomBy(1.25), reset: () => globe.resetView(),
+  rotate: () => globe.setAutoRotate(!globe.isAutoRotating()), tour: () => (tour.active ? stopTour() : startTour()),
+  snap: saveSnapshot, full: toggleFullscreen, help: () => openModal('help'),
+};
+$('#dock').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b) dockActions[b.dataset.act]?.(); });
+
+// ── Cinematic tour ──────────────────────────────────────────────────────────
+const tour = { active: false, token: 0 };
+const wait = (ms, token) => new Promise(r => setTimeout(() => r(token === tour.token && tour.active), ms));
+function buildTourStops() {
+  const active = state.shipments.filter(s => s.status !== 'Delivered');
+  const stops = [{ title: 'The global network', sub: `${active.length} active shipments · ${money(active.reduce((a, s) => a + s.value_usd, 0))} in transit across ${state.network?.routes.length || 0} lanes`,
+    go: () => { globe.resetView(); globe.setAutoRotate(false); } }];
+  const events = (state.network?.events || []).filter(e => ['CRITICAL', 'HIGH'].includes(e.severity))
+    .sort((a, b) => RANK[b.severity] - RANK[a.severity]).slice(0, 3);
+  events.forEach(e => stops.push({ title: `${e.country} · ${titleCase(e.event_type)}`, sub: `${e.severity} — ${e.description}`,
+    go: () => { globe.flyTo(e.lat, e.lon, 2.3); renderDetail({ kind: 'event', data: e }); } }));
+  const delayed = active.filter(s => s.status === 'Delayed').sort((a, b) => b.value_usd - a.value_usd).slice(0, 2);
+  const top = active.filter(s => !delayed.includes(s)).sort((a, b) => b.value_usd - a.value_usd).slice(0, 2);
+  [...delayed, ...top].forEach(s => stops.push({
+    title: `${s.id} · ${s.supplier_name}`,
+    sub: `${s.status === 'Delayed' ? 'Delayed' : 'High value'} · ${s.origin} → ${s.destination} · ${money(s.value_usd)} · ${etaText(s.estimated_arrival)}`,
+    go: () => globe.focusShipment(s.id, 2.1) }));
+  [...state.whatIf.closed].forEach(id => {
+    const c = CHOKEPOINTS.find(x => x.id === id);
+    stops.push({ title: `${c.name} closed`, sub: `What-if scenario · ${state.whatIf.routes.size} lanes cut`,
+      go: () => { globe.flyTo(c.lat, c.lon, 2.6); globe.selectChokepoint(id); } });
+  });
+  stops.push({ title: 'Back to orbit', sub: 'Tour complete. Press T to replay.', go: () => { globe.clearSelection(); globe.resetView(); } });
+  return stops;
+}
+async function startTour() {
+  if (!state.network) return toast('Network still loading…');
+  if (document.body.dataset.view !== 'command') show('command');
+  stopTimePlay();
+  tour.active = true; const token = ++tour.token;
+  $('#tour').classList.remove('hidden');
+  $('#dock [data-act="tour"]').classList.add('on');
+  $('#dock [data-act="tour"] span').textContent = 'Stop';
+  const stops = buildTourStops(), DUR = reducedMotion() ? 4000 : 5200;
+  for (let i = 0; i < stops.length; i++) {
+    const s = stops[i];
+    $('#tourStep').textContent = `Tour · ${i + 1} / ${stops.length}`;
+    $('#tourTitle').textContent = s.title; $('#tourSub').textContent = s.sub;
+    const bar = $('#tourBar'); bar.style.transition = 'none'; bar.style.width = '0';
+    void bar.offsetWidth; bar.style.transition = `width ${DUR}ms linear`; bar.style.width = '100%';
+    s.go();
+    if (!(await wait(DUR, token))) return;
+  }
+  stopTour();
+}
+function stopTour() {
+  if (!tour.active) return;
+  tour.active = false; tour.token++;
+  $('#tour').classList.add('hidden');
+  $('#dock [data-act="tour"]').classList.remove('on');
+  $('#dock [data-act="tour"] span').textContent = 'Tour';
+}
+$('#tourStop').addEventListener('click', stopTour);
+$('#globe').addEventListener('pointerdown', () => { if (tour.active) { stopTour(); toast('Tour stopped — you have the controls'); } });
+
+// ── Modals ──────────────────────────────────────────────────────────────────
+let lastFocus = null;
+function openModal(id) {
+  lastFocus = document.activeElement;
+  $(`#${id}`).classList.remove('hidden');
+  if (id === 'palette') { const i = $('#paletteInput'); i.value = ''; renderPalette(); i.focus(); }
+  else $(`#${id} [data-close]`)?.focus();
+}
+function closeModal(id) {
+  $(`#${id}`).classList.add('hidden');
+  lastFocus?.focus?.();
+}
+const openModalId = () => $$('.modal').find(m => !m.classList.contains('hidden'))?.id;
+$$('.modal').forEach(m => m.addEventListener('click', e => {
+  if (e.target === m || e.target.closest('[data-close]')) closeModal(m.id);
+}));
+$('#openPalette').addEventListener('click', () => openModal('palette'));
+
+// ── Command palette ─────────────────────────────────────────────────────────
+const TAB_NAMES = { command: 'Command', shipments: 'Shipments', threats: 'Threat Radar', analytics: 'Analytics', intel: 'Intelligence', system: 'System' };
+function paletteItems() {
+  const items = [];
+  Object.entries(TAB_NAMES).forEach(([v, name], i) => items.push({ group: 'Go to', icon: i + 1, title: name, sub: `Open the ${name} tab`, run: () => show(v) }));
+  items.push(
+    { group: 'Actions', icon: '▶', title: 'Start cinematic tour', sub: 'Fly through hotspots and key shipments', run: startTour },
+    { group: 'Actions', icon: '⟳', title: 'Scan shipments for threats', sub: 'Run the threat radar', run: () => { show('threats'); runScan(); } },
+    { group: 'Actions', icon: '◎', title: 'Reset globe view', sub: 'Back to orbit', run: () => globe.resetView() },
+    { group: 'Actions', icon: '↻', title: 'Toggle auto-rotate', sub: 'Spin the globe', run: () => globe.setAutoRotate(!globe.isAutoRotating()) },
+    { group: 'Actions', icon: '⇩', title: 'Export shipments as CSV', sub: 'Uses the current table filters', run: exportCsv },
+    { group: 'Actions', icon: '◷', title: 'Reset time travel', sub: 'Back to now', run: () => setTimeDays(0) },
+    { group: 'Actions', icon: '⛶', title: 'Toggle fullscreen', sub: 'F', run: toggleFullscreen },
+    { group: 'Actions', icon: '?', title: 'Keyboard shortcuts', sub: 'Show all shortcuts', run: () => openModal('help') });
+  if (state.whatIf.closed.size) items.push({ group: 'Actions', icon: '✓', title: 'Reopen all chokepoints', sub: 'Clear the what-if scenario', run: () => { state.whatIf.closed.clear(); applyWhatIf(); } });
+  state.shipments.forEach(s => items.push({ group: 'Shipments', icon: '⛴', color: STATUS_COLORS[s.status], title: `${s.id} · ${s.sku}`,
+    sub: `${s.supplier_name} · ${s.origin} → ${s.destination} · ${s.status}`, keys: [s.carrier, s.supplier_country],
+    run: () => { show('command'); globe.focusShipment(s.id); } }));
+  (state.network?.hubs || []).forEach(h => items.push({ group: 'Ports & hubs', icon: '⚓', title: h.name, sub: h.region,
+    run: () => { show('command'); globe.flyTo(h.lat, h.lon, 2.2); renderDetail({ kind: 'hub', data: h }); } }));
+  CHOKEPOINTS.forEach(c => items.push({ group: 'Chokepoints', icon: '◆', color: state.whatIf.closed.has(c.id) ? RISK_COLORS.CRITICAL : '#ffd76b',
+    title: `${state.whatIf.closed.has(c.id) ? 'Reopen' : 'Close'} ${c.name}`, sub: `What-if · ${c.note}`,
+    run: () => { show('command'); toggleChoke(c.id); globe.flyTo(c.lat, c.lon, 2.8); globe.selectChokepoint(c.id); } }));
+  (state.network?.events || []).forEach(e => items.push({ group: 'Geo events', icon: '!', color: RISK_COLORS[e.severity], title: `${e.country} · ${titleCase(e.event_type)}`,
+    sub: `${e.severity} — ${e.description}`, run: () => { show('command'); globe.flyTo(e.lat, e.lon, 2.3); renderDetail({ kind: 'event', data: e }); } }));
+  return items;
+}
+let paletteResults = [], paletteIdx = 0;
+function renderPalette() {
+  const q = $('#paletteInput').value.trim().toLowerCase();
+  const all = paletteItems();
+  let res;
+  if (!q) res = all.filter(i => i.group === 'Actions' || i.group === 'Go to');
+  else {
+    const terms = q.split(/\s+/);
+    res = all.map(i => {
+      const hay = [i.title, i.sub, ...(i.keys || [])].join(' ').toLowerCase();
+      if (!terms.every(t => hay.includes(t))) return null;
+      return { ...i, score: (i.title.toLowerCase().startsWith(q) ? 3 : 0) + (i.title.toLowerCase().includes(q) ? 2 : 0) };
+    }).filter(Boolean);
+    const byGroup = {};
+    res.forEach(i => (byGroup[i.group] ||= []).push(i));
+    // best-matching group first (e.g. "rotter" puts the Rotterdam hub above shipments that mention it)
+    res = Object.values(byGroup).map(g => g.sort((a, b) => b.score - a.score).slice(0, 6))
+      .sort((a, b) => b[0].score - a[0].score).flat();
+  }
+  paletteResults = res; paletteIdx = 0;
+  let lastGroup = '';
+  $('#paletteList').innerHTML = res.map((i, n) => {
+    const head = i.group !== lastGroup ? `<li class="grp" role="presentation">${esc(i.group)}</li>` : '';
+    lastGroup = i.group;
+    return `${head}<li class="opt" role="option" id="pal-${n}" data-n="${n}" aria-selected="${n === 0}">
+      <span class="ic" style="${i.color ? `--c:${i.color}` : ''}">${esc(i.icon)}</span>
+      <div class="grow"><div class="t">${esc(i.title)}</div><div class="s">${esc(i.sub)}</div></div></li>`;
+  }).join('') || '<li class="empty">No matches.</li>';
+}
+function movePalette(d) {
+  if (!paletteResults.length) return;
+  paletteIdx = (paletteIdx + d + paletteResults.length) % paletteResults.length;
+  $$('#paletteList li.opt').forEach(li => li.setAttribute('aria-selected', String(+li.dataset.n === paletteIdx)));
+  $(`#pal-${paletteIdx}`)?.scrollIntoView({ block: 'nearest' });
+}
+function runPalette(n) {
+  const item = paletteResults[n]; if (!item) return;
+  closeModal('palette'); item.run();
+}
+$('#paletteInput').addEventListener('input', renderPalette);
+$('#paletteInput').addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); movePalette(1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); movePalette(-1); }
+  else if (e.key === 'Enter') { e.preventDefault(); runPalette(paletteIdx); }
+});
+$('#paletteList').addEventListener('click', e => { const li = e.target.closest('li.opt'); if (li) runPalette(+li.dataset.n); });
+$('#paletteList').addEventListener('mousemove', e => {
+  const li = e.target.closest('li.opt'); if (!li || +li.dataset.n === paletteIdx) return;
+  paletteIdx = +li.dataset.n;
+  $$('#paletteList li.opt').forEach(x => x.setAttribute('aria-selected', String(x === li)));
+});
+
+// ── CSV export ──────────────────────────────────────────────────────────────
+function exportCsv() {
+  const rows = filteredShipments();
+  const cols = ['id', 'sku', 'status', 'supplier_name', 'supplier_country', 'origin', 'destination', 'carrier', 'route_id', 'estimated_arrival', 'units', 'value_usd'];
+  const cell = v => {
+    let s = String(v ?? '');
+    if (typeof v === 'string' && /^[=+\-@]/.test(s)) s = `'${s}`; // keep spreadsheets from evaluating formulas
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = [cols.join(','), ...rows.map(r => cols.map(c => cell(r[c])).join(','))].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = `shipments-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast(`Exported ${rows.length} shipment${rows.length === 1 ? '' : 's'}`);
+}
+$('#exportCsv').addEventListener('click', exportCsv);
+
+// ── Keyboard shortcuts ──────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    return openModalId() === 'palette' ? closeModal('palette') : openModal('palette');
+  }
+  if (e.key === 'Escape') {
+    const m = openModalId();
+    if (m) return closeModal(m);
+    if (tour.active) return stopTour();
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return e.target.blur();
+    return globe.clearSelection();
+  }
+  if (openModalId() || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable) return;
+  const views = Object.keys(TAB_NAMES);
+  const k = e.key;
+  if (k >= '1' && k <= '6') show(views[+k - 1]);
+  else if (k === '/') { e.preventDefault(); openModal('palette'); }
+  else if (k === '?') openModal('help');
+  else if (k === 't' || k === 'T') tour.active ? stopTour() : startTour();
+  else if (k === 'r' || k === 'R') globe.setAutoRotate(!globe.isAutoRotating());
+  else if (k === '+' || k === '=') globe.zoomBy(0.8);
+  else if (k === '-' || k === '_') globe.zoomBy(1.25);
+  else if (k === '0') globe.resetView();
+  else if (k === 'f' || k === 'F') toggleFullscreen();
+  else if (k === ']') { stopTimePlay(); setTimeDays(Math.floor(state.timeDays) + 1); }
+  else if (k === '[') { stopTimePlay(); setTimeDays(Math.ceil(state.timeDays) - 1); }
+  else return;
+  e.preventDefault();
+});
+
 // ── Boot ────────────────────────────────────────────────────────────────────
 (async function boot() {
   await loadHealth();
@@ -425,4 +794,7 @@ $('#alertForm').addEventListener('submit', async e => {
   $('#loader').classList.add('done');
   setTimeout(() => $('#loader').remove(), 700);
   setInterval(loadHealth, 30000);
+  let hinted = false;
+  try { hinted = localStorage.getItem('orbit.hinted') === '1'; localStorage.setItem('orbit.hinted', '1'); } catch { /* storage blocked */ }
+  if (!hinted) setTimeout(() => toast('Tip: Ctrl+K searches everything, T starts a cinematic tour, ? lists shortcuts', 7000), 1200);
 })();

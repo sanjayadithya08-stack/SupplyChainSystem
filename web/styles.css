@@ -274,3 +274,112 @@ td .sub { color: var(--muted); font-size: 11.5px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* ═══════════ v2.2 — 3D & UX upgrade ═══════════ */
+kbd { font-family: var(--mono); font-size: 10.5px; padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line-strong);
+  background: rgba(255,255,255,.05); color: var(--muted); box-shadow: inset 0 -1px 0 rgba(255,255,255,.08); }
+
+/* Columns scroll instead of overflowing the viewport */
+.view[data-view="command"].active .col { max-height: calc(100vh - 108px); overflow-y: auto; scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent; padding: 2px 4px 2px 2px; }
+
+/* Search button in the top bar */
+.kbd-btn { display: flex; align-items: center; gap: 8px; padding: 7px 10px 7px 12px; border-radius: 999px; cursor: pointer;
+  background: var(--glass); border: 1px solid var(--line); color: var(--muted); backdrop-filter: blur(14px);
+  transition: border-color .2s, color .2s; white-space: nowrap; }
+.kbd-btn:hover { color: var(--text); border-color: var(--line-strong); }
+
+/* Icon buttons */
+.icon-btn { display: grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 9px; cursor: pointer;
+  border: 1px solid var(--line-strong); background: rgba(255,255,255,.04); color: var(--text); transition: background .2s, transform .15s; }
+.icon-btn:hover { background: rgba(56,225,255,.12); transform: translateY(-1px); }
+.icon-btn.on { background: linear-gradient(135deg, var(--accent), #8fe9ff); color: #04101c; border: 0; }
+
+/* Globe dock */
+.dock { position: fixed; z-index: 8; bottom: 18px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 4px; padding: 6px; border-radius: 16px;
+  background: var(--glass-strong); border: 1px solid var(--line); backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: 0 18px 50px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06);
+  transition: left .45s cubic-bezier(.2,.8,.2,1); }
+body:not([data-view="command"]) .dock { left: calc((100vw - min(600px, 100vw - 36px) - 18px) / 2); }
+.dock button { display: flex; align-items: center; gap: 6px; height: 36px; min-width: 36px; padding: 0 9px; border: 0; border-radius: 11px;
+  background: none; color: var(--muted); cursor: pointer; transition: background .2s, color .2s, transform .15s; }
+.dock button:hover { background: rgba(255,255,255,.07); color: var(--text); transform: translateY(-2px); }
+.dock button[aria-pressed="true"] { color: var(--accent); }
+.dock button.accent { color: #04101c; background: linear-gradient(135deg, var(--accent), #8fe9ff); font-weight: 600; }
+.dock button.accent.on { background: linear-gradient(135deg, var(--critical), #ff8aa8); }
+.dock svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.dock .sep { width: 1px; height: 22px; background: var(--line-strong); margin: 0 4px; }
+
+/* Time travel */
+.scrub { display: flex; align-items: center; gap: 10px; }
+.scrub input[type="range"] { flex: 1; accent-color: var(--accent); height: 4px; }
+.scrub-ticks { display: flex; justify-content: space-between; margin: 4px 0 6px 40px; color: var(--muted); font-size: 10.5px; font-family: var(--mono); }
+#timeLabel { font-family: var(--mono); color: var(--text); text-transform: none; letter-spacing: 0; float: right; }
+
+/* What-if */
+.chips button.chip { cursor: pointer; border: 1px solid var(--line-strong); background: rgba(255,255,255,.03); color: var(--muted);
+  padding: 5px 10px; border-radius: 999px; font-size: 12px; transition: all .2s; }
+.chips button.chip:hover { color: var(--text); border-color: #ffd76b; }
+.chips button.chip[aria-pressed="true"] { color: #fff; background: color-mix(in srgb, var(--critical) 28%, transparent); border-color: var(--critical);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--critical) 40%, transparent); }
+.whatif { margin-top: 12px; }
+.whatif .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+.whatif .stats div { padding: 8px; border-radius: 10px; background: rgba(255,61,113,.07); border: 1px solid rgba(255,61,113,.25); }
+.whatif .stats b { display: block; font-size: 17px; font-variant-numeric: tabular-nums; }
+.whatif .stats span { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; }
+
+/* Tour caption */
+.tour { position: fixed; z-index: 9; left: 50%; bottom: 76px; transform: translateX(-50%); width: min(460px, calc(100vw - 32px));
+  padding: 14px 16px 12px; border-radius: 16px; background: var(--glass-strong); border: 1px solid var(--line-strong);
+  backdrop-filter: blur(18px); box-shadow: 0 24px 60px rgba(0,0,0,.55); animation: rise .5s cubic-bezier(.2,.8,.2,1); }
+@keyframes rise { from { opacity: 0; transform: translate(-50%, 16px); } }
+.tour-head { display: flex; justify-content: space-between; align-items: center; }
+.tour-step { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: .08em; text-transform: uppercase; }
+.tour-title { font-size: 19px; font-weight: 700; margin: 4px 0 2px; }
+.tour-sub { color: var(--muted); font-size: 13px; }
+.tour-bar { height: 3px; border-radius: 2px; background: rgba(255,255,255,.08); overflow: hidden; margin-top: 10px; }
+.tour-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent-2), var(--accent)); }
+
+/* Modals */
+.modal { position: fixed; inset: 0; z-index: 45; display: grid; place-items: start center; padding: 12vh 16px 16px;
+  background: rgba(2,4,10,.55); backdrop-filter: blur(6px); animation: fade .2s ease; }
+@keyframes fade { from { opacity: 0; } }
+.modal-card { width: min(620px, 100%); border-radius: 18px; background: var(--glass-strong); border: 1px solid var(--line-strong);
+  box-shadow: 0 40px 100px rgba(0,0,0,.6); overflow: hidden; animation: pop .25s cubic-bezier(.2,.8,.2,1); }
+@keyframes pop { from { opacity: 0; transform: translateY(-8px) scale(.98); } }
+.palette-input { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); color: var(--muted); }
+.palette-input input { flex: 1; border: 0; outline: none; background: none; font-size: 16px; color: var(--text); min-width: 0; }
+.palette-list { list-style: none; margin: 0; padding: 6px; max-height: 50vh; overflow-y: auto; }
+.palette-list .grp { padding: 10px 10px 4px; font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
+.palette-list li.opt { display: flex; align-items: center; gap: 12px; padding: 9px 10px; border-radius: 10px; cursor: pointer; }
+.palette-list li.opt[aria-selected="true"] { background: rgba(56,225,255,.12); }
+.palette-list .ic { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: 8px;
+  background: color-mix(in srgb, var(--c, var(--accent)) 16%, transparent); color: var(--c, var(--accent)); font-size: 13px; font-weight: 700; }
+.palette-list .grow { flex: 1; min-width: 0; }
+.palette-list .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.palette-list .s { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.palette-list .empty { padding: 14px; }
+.palette-foot { display: flex; gap: 16px; padding: 10px 16px; border-top: 1px solid var(--line); }
+.help { padding: 20px 22px; }
+.keys { display: grid; grid-template-columns: auto 1fr; gap: 10px 18px; margin: 6px 0 0; align-items: center; }
+.keys dt { white-space: nowrap; }
+.keys dd { margin: 0; color: var(--muted); }
+
+/* Detail extras */
+.detail-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.eta-chip { font-family: var(--mono); font-size: 11.5px; color: var(--accent); }
+
+@media (max-width: 1100px) {
+  .kbd-btn span, .kbd-btn kbd { display: none; }
+}
+@media (max-width: 820px) {
+  .kbd-btn { order: 2; }
+  .dock, body:not([data-view="command"]) .dock { left: 50%; bottom: auto; top: calc(58vh - 54px); padding: 4px; }
+  .dock .sep, .dock button[data-act="snap"] { display: none; }
+  .dock button { height: 32px; min-width: 32px; padding: 0 7px; }
+  .dock button span { display: none; }
+  .tour { bottom: auto; top: 76px; }
+  .view[data-view="command"].active .col { max-height: none; overflow: visible; }
+  .modal { padding-top: 8vh; }
+}

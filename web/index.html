@@ -41,6 +41,10 @@
       <button role="tab" data-view="intel">Intelligence</button>
       <button role="tab" data-view="system">System</button>
     </nav>
+    <button class="kbd-btn" id="openPalette" title="Search everything (Ctrl+K)">
+      <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>Search</span><kbd>Ctrl K</kbd>
+    </button>
     <div class="status" id="status"><span class="dot"></span><span class="label">Connecting…</span></div>
   </header>
 
@@ -59,6 +63,10 @@
             <label><input type="checkbox" data-layer="routes" checked /> Trade routes</label>
             <label><input type="checkbox" data-layer="shipments" checked /> Shipments</label>
             <label><input type="checkbox" data-layer="events" checked /> Geo events</label>
+            <label><input type="checkbox" data-layer="columns" checked /> Value columns</label>
+            <label><input type="checkbox" data-layer="chokepoints" checked /> Chokepoints</label>
+            <label><input type="checkbox" data-layer="daynight" checked /> Day / night</label>
+            <label><input type="checkbox" data-layer="satellites" checked /> Satellites</label>
             <label><input type="checkbox" data-layer="rotate" checked /> Auto-rotate</label>
           </div>
           <h3>Route risk</h3>
@@ -69,11 +77,27 @@
             <span><i style="--c:var(--critical)"></i>Critical</span>
           </div>
         </div>
+        <div class="card tilt">
+          <h3>Time travel <span class="muted small" id="timeLabel">Now</span></h3>
+          <div class="scrub">
+            <button class="icon-btn" id="timePlay" aria-label="Play time forward" title="Play">
+              <svg viewBox="0 0 24 24" width="16" height="16"><path d="M7 5v14l12-7z" fill="currentColor"/></svg>
+            </button>
+            <input type="range" id="timeRange" min="0" max="30" step="0.25" value="0" aria-label="Days from now" />
+          </div>
+          <div class="scrub-ticks"><span>Now</span><span>+10d</span><span>+20d</span><span>+30d</span></div>
+          <p class="muted small" id="timeStats">Drag to project every voyage forward. Arrived ships drop off the globe.</p>
+        </div>
       </div>
       <div class="col right">
         <div class="card tilt" id="detail">
           <h3>Selection</h3>
           <p class="muted">Click a shipment, hub or event on the globe to inspect it.</p>
+        </div>
+        <div class="card tilt">
+          <h3>What-if: close a chokepoint</h3>
+          <div class="chips" id="chokeChips"></div>
+          <div id="whatIf" class="whatif"><p class="muted small">Pick one or more chokepoints to see which lanes, shipments and how much value would be cut off.</p></div>
         </div>
         <div class="card tilt">
           <h3>Hotspots <span class="muted small">geo events, HIGH+</span></h3>
@@ -93,6 +117,7 @@
               <option value="">All statuses</option>
               <option>In Transit</option><option>Delayed</option><option>Pending</option>
             </select>
+            <button class="btn" id="exportCsv" title="Download the filtered rows as CSV">Export CSV</button>
           </div>
         </div>
         <div class="table-wrap">
@@ -181,6 +206,59 @@
       </div>
     </section>
   </main>
+
+  <!-- Globe dock -->
+  <div class="dock" id="dock" role="toolbar" aria-label="Globe controls">
+    <button data-act="zoomIn" title="Zoom in (+)" aria-label="Zoom in"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button data-act="zoomOut" title="Zoom out (-)" aria-label="Zoom out"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+    <button data-act="reset" title="Reset view (0)" aria-label="Reset view"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/></svg></button>
+    <button data-act="rotate" title="Toggle auto-rotate (R)" aria-label="Toggle auto-rotate" aria-pressed="true"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg></button>
+    <span class="sep"></span>
+    <button data-act="tour" class="accent" title="Cinematic tour (T)" aria-label="Start cinematic tour"><svg viewBox="0 0 24 24"><path d="M3 7h12v10H3zM15 10l6-3v10l-6-3"/></svg><span>Tour</span></button>
+    <button data-act="snap" title="Save globe snapshot" aria-label="Save globe snapshot"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+    <button data-act="full" title="Fullscreen (F)" aria-label="Toggle fullscreen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    <button data-act="help" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.7M12 17h.01"/></svg></button>
+  </div>
+
+  <!-- Tour caption -->
+  <div class="tour hidden" id="tour" role="status" aria-live="polite">
+    <div class="tour-head"><span class="tour-step" id="tourStep"></span><button class="icon-btn" id="tourStop" aria-label="Stop tour" title="Stop (Esc)">&#x2715;</button></div>
+    <div class="tour-title" id="tourTitle"></div>
+    <div class="tour-sub" id="tourSub"></div>
+    <div class="tour-bar"><i id="tourBar"></i></div>
+  </div>
+
+  <!-- Command palette -->
+  <div class="modal hidden" id="palette" role="dialog" aria-modal="true" aria-label="Search">
+    <div class="modal-card palette">
+      <div class="palette-input">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input id="paletteInput" placeholder="Search shipments, ports, events, chokepoints, actions..." autocomplete="off" spellcheck="false" aria-label="Search" />
+        <kbd>Esc</kbd>
+      </div>
+      <ul id="paletteList" class="palette-list" role="listbox"></ul>
+      <div class="palette-foot muted small"><span><kbd>&uarr;</kbd><kbd>&darr;</kbd> move</span><span><kbd>Enter</kbd> open</span><span><kbd>Esc</kbd> close</span></div>
+    </div>
+  </div>
+
+  <!-- Help -->
+  <div class="modal hidden" id="help" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+    <div class="modal-card help">
+      <div class="panel-head"><h2>Keyboard shortcuts</h2><button class="icon-btn" data-close aria-label="Close">&#x2715;</button></div>
+      <dl class="keys">
+        <dt><kbd>Ctrl</kbd> <kbd>K</kbd> or <kbd>/</kbd></dt><dd>Search everything</dd>
+        <dt><kbd>1</kbd> &ndash; <kbd>6</kbd></dt><dd>Switch tabs</dd>
+        <dt><kbd>T</kbd></dt><dd>Start / stop the cinematic tour</dd>
+        <dt><kbd>R</kbd></dt><dd>Toggle auto-rotate</dd>
+        <dt><kbd>+</kbd> <kbd>&minus;</kbd></dt><dd>Zoom the globe</dd>
+        <dt><kbd>0</kbd></dt><dd>Reset the view</dd>
+        <dt><kbd>F</kbd></dt><dd>Fullscreen</dd>
+        <dt><kbd>[</kbd> <kbd>]</kbd></dt><dd>Time travel back / forward one day</dd>
+        <dt><kbd>Esc</kbd></dt><dd>Close dialogs, stop the tour, clear the selection</dd>
+        <dt><kbd>?</kbd></dt><dd>This help</dd>
+      </dl>
+    </div>
+  </div>
 
   <div id="tooltip" class="tooltip hidden" role="status"></div>
   <div id="toast" class="toast hidden" role="status"></div>
