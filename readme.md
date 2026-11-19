@@ -30,6 +30,18 @@ The API now serves a WebGL command center at **`http://localhost:8000/`**:
 
 The original Streamlit console still runs on port 8501.
 
+### ✨ v2.2 — 3D & UX upgrade
+
+- **3D cargo ships with wake trails**: each shipment is a small container ship that points along its lane and leaves a glowing wake. Selecting a ship highlights its lane and dims the others.
+- **Real-time day/night terminator**: the night side and the dawn/dusk line follow the actual position of the sun.
+- **Value columns**: 3D columns on each port show how much cargo value is moving through it, and they grow in when the globe loads.
+- **What-if chokepoint simulator**: close Suez, Bab-el-Mandeb, Hormuz, Malacca, Taiwan Strait, Panama, the Cape or the English Channel. You see red exclusion zones, the lanes that are cut, and the stranded shipments and their value.
+- **Time travel**: scrub or play up to 30 days ahead. Ships move along their voyages, arrived cargo drops off the globe, and the sun line moves with the clock.
+- **Cinematic tour (`T`)**: an automatic camera flight through critical hotspots, delayed shipments, high-value cargo and any active what-if closures, with captions.
+- **Command palette (`Ctrl K` or `/`)**: search shipments, ports, geo events, chokepoints and actions from one place.
+- **Globe dock**: zoom, reset, auto-rotate, tour, PNG snapshot, fullscreen and a shortcut list (`?`).
+- **Also new**: CSV export of the shipment table, count-up KPI animations, ETA countdowns, orbiting satellites and a twinkling starfield.
+
 ---
 
 ## 🚀 Key Features
